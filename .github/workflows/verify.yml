@@ -14,7 +14,7 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
-        run: ./Scripts/generate_xcode_project.sh
+        run: bash Scripts/generate_xcode_project.sh
       - name: Build iOS simulator without signing
         run: |
           set -o pipefail
