@@ -1,0 +1,104 @@
+name: iPhone Test IPA - unsigned signing input
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/iphone-test-ipa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-iphone:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect Xcode and source
+        run: |
+          xcodebuild -version
+          git rev-parse HEAD
+
+      - name: Install XcodeGen and generate project
+        run: |
+          brew install xcodegen
+          bash Scripts/generate_xcode_project.sh
+
+      - name: Build unsigned iPhone device app (arm64)
+        run: |
+          set -euo pipefail
+          xcodebuild -project HealthIntelligence.xcodeproj \
+            -scheme HealthIntelligence \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath derived \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee iphone-device-build.log
+
+      - name: Package unsigned iPhone-only IPA for private local signing
+        run: |
+          set -euo pipefail
+          app="derived/Build/Products/Release-iphoneos/HealthIntelligence.app"
+          test -d "$app"
+          test -s "$app/HealthIntelligence"
+          xcrun lipo -archs "$app/HealthIntelligence" | grep -qw arm64
+
+          mkdir -p dist/Payload
+          ditto "$app" "dist/Payload/HealthIntelligence.app"
+
+          # This artifact is the iPhone-only first-stage candidate.
+          # Watch requires separate profiles and real-device validation;
+          # do not ship an unsigned/unsupported embedded Watch target.
+          rm -rf "dist/Payload/HealthIntelligence.app/Watch/HealthWatch.app"
+          rm -rf "dist/Payload/HealthIntelligence.app/PlugIns/HealthWatch.app"
+          rmdir "dist/Payload/HealthIntelligence.app/Watch" 2>/dev/null || true
+          rmdir "dist/Payload/HealthIntelligence.app/PlugIns" 2>/dev/null || true
+          test ! -d "dist/Payload/HealthIntelligence.app/Watch/HealthWatch.app"
+          test ! -d "dist/Payload/HealthIntelligence.app/PlugIns/HealthWatch.app"
+
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
+            "dist/Payload/HealthIntelligence.app/Info.plist" | tee dist/bundle-id.txt
+
+          (
+            cd dist
+            ditto -c -k --sequesterRsrc --keepParent Payload \
+              HealthIntelligence-iPhone-UNSIGNED.ipa
+            shasum -a 256 HealthIntelligence-iPhone-UNSIGNED.ipa \
+              > SHA256SUMS.txt
+          )
+
+          printf '%s\n' \
+            'iPhone TEST CANDIDATE / UNSIGNED / NOT DIRECTLY INSTALLABLE' \
+            'Built for physical iPhone (arm64), without embedded Watch app.' \
+            'Signing MUST be done privately with a matching valid certificate,' \
+            'iPhone provisioning profile, registered device ID and HealthKit entitlement.' \
+            'Use a matching bundle identifier and check the final signed entitlements.' \
+            'Never upload P12, its password, or provisioning profiles to this public repository.' \
+            'A successful unsigned build does not verify HealthKit access or on-device launch.' \
+            "Source commit: ${GITHUB_SHA}" \
+            > dist/README-SIGN-BEFORE-INSTALL.txt
+          ls -lh dist/HealthIntelligence-iPhone-UNSIGNED.ipa dist/SHA256SUMS.txt
+
+      - name: Upload iPhone signing input
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-unsigned-signing-input
+          path: |
+            dist/HealthIntelligence-iPhone-UNSIGNED.ipa
+            dist/SHA256SUMS.txt
+            dist/README-SIGN-BEFORE-INSTALL.txt
+            dist/bundle-id.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-device-build-log
+          path: iphone-device-build.log
+          if-no-files-found: ignore
+          retention-days: 7
