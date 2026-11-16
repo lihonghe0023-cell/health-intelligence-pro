@@ -21,7 +21,7 @@ targets:
       - path: iOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.healthintelligence
+        PRODUCT_BUNDLE_IDENTIFIER: app.rose4354.lettuce4008
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_NAME: HealthIntelligence
         GENERATE_INFOPLIST_FILE: "YES"
