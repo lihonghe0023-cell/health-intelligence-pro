@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import HealthCore
 
 @main
@@ -11,13 +10,13 @@ struct HealthWatchApp: App {
 }
 
 /// Watch colors resolve from the same HealthDesignTokens as the iPhone app.
-/// The Watch is always dark, so the dark values apply.
+/// watchOS has no UIColor dynamic provider and no userInterfaceStyle, so
+/// there is no dynamic resolution here: the Watch interface is always dark,
+/// and the dark value applies.
 private enum WatchPalette {
     static func color(_ token: HealthDesignTokens.Token) -> Color {
-        Color(uiColor: UIColor { traits in
-            let rgb = traits.userInterfaceStyle == .dark ? token.dark : token.light
-            return UIColor(red: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
-        })
+        let rgb = token.dark
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
     static let mint = color(HealthDesignTokens.teal)
     static let pink = color(HealthDesignTokens.heart)
