@@ -62,7 +62,7 @@ jobs:
               || echo "xcresulttool export failed, the xcresult is still uploaded below"
           fi
           find screenshots -type f -name '*.png' | sort
-      - name: Capture Watch screenshot
+      - name: Capture Watch screenshots
         if: always()
         run: |
           set -o pipefail
@@ -72,8 +72,25 @@ jobs:
             CODE_SIGNING_ALLOWED=NO build | tee watch-build.log
           bash Scripts/capture_watch_screenshot.sh \
             "build-dd/Build/Products/Debug-watchsimulator/HealthWatch.app" \
-            "screenshots/watch.png" || echo "Watch screenshot failed (see log)"
-          ls -la screenshots/ || true
+            "screenshots"
+      - name: Verify screenshot set
+        if: always()
+        run: |
+          echo "== files =="
+          find screenshots -type f | sort
+          echo "== counts (expect 7 light + 7 dark + 7 large-text + 2 watch) =="
+          for prefix in light dark large-text; do
+            n=$(find screenshots -type f -name "$prefix-*.png" | wc -l)
+            echo "$prefix: $n"
+            [ "$n" -eq 7 ] || { echo "FAIL: expected 7 $prefix screenshots, found $n"; exit 1; }
+          done
+          n=$(find screenshots -type f -name "watch-*.png" | wc -l)
+          echo "watch: $n"
+          [ "$n" -eq 2 ] || { echo "FAIL: expected 2 watch screenshots, found $n"; exit 1; }
+          [ -f screenshots/watch-manifest.json ] || { echo "FAIL: watch-manifest.json missing"; exit 1; }
+          echo "== non-empty check =="
+          find screenshots -type f -name '*.png' -empty -print | grep . && { echo "FAIL: empty PNG present"; exit 1; } || echo "all PNGs non-empty"
+          echo "OK: screenshot set complete"
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
