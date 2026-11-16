@@ -34,3 +34,60 @@ jobs:
           name: build-logs
           path: '*-build.log'
           if-no-files-found: ignore
+
+  screenshots:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Xcode
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: bash Scripts/generate_xcode_project.sh
+      - name: Run screenshot UI tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project HealthIntelligence.xcodeproj -scheme HealthIntelligence \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -only-testing:HealthIntelligenceUITests \
+            -resultBundlePath UITestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO | tee uitest.log
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p screenshots
+          if [ -d UITestResults.xcresult ]; then
+            xcrun xcresulttool export attachments --path UITestResults.xcresult --output-path screenshots \
+              || echo "xcresulttool export failed, the xcresult is still uploaded below"
+          fi
+          find screenshots -type f -name '*.png' | sort
+      - name: Capture Watch screenshot
+        if: always()
+        run: |
+          set -o pipefail
+          xcodebuild -project HealthIntelligence.xcodeproj -scheme HealthWatch \
+            -destination 'generic/platform=watchOS Simulator' \
+            -derivedDataPath build-dd \
+            CODE_SIGNING_ALLOWED=NO build | tee watch-build.log
+          bash Scripts/capture_watch_screenshot.sh \
+            "build-dd/Build/Products/Debug-watchsimulator/HealthWatch.app" \
+            "screenshots/watch.png" || echo "Watch screenshot failed (see log)"
+          ls -la screenshots/ || true
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: warn
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uitest-results
+          path: |
+            UITestResults.xcresult
+            uitest.log
+            watch-build.log
+          if-no-files-found: ignore
