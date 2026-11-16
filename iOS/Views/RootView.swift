@@ -41,7 +41,15 @@ struct RootView: View {
         .tint(HealthTheme.teal)
         .preferredColorScheme(forcedColorScheme)
         .dynamicTypeSizeIfPresent(forcedDynamicTypeSize)
-        .sheet(isPresented: $showOnboarding) { WelcomeHealthView() }
+        .sheet(isPresented: $showOnboarding) {
+            // The sheet is a separate presentation context: environment
+            // modifiers on the TabView do not reliably reach it (large
+            // text showed 0.06% diff on welcome in #50 while dark mode
+            // worked). Apply the forced modes directly to the sheet content.
+            WelcomeHealthView()
+                .preferredColorScheme(forcedColorScheme)
+                .dynamicTypeSizeIfPresent(forcedDynamicTypeSize)
+        }
         .onAppear {
             // Screenshot-test hook: reset onboarding so each display mode
             // starts at the welcome screen. Only active when the test
