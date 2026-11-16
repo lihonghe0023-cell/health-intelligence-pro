@@ -1,0 +1,36 @@
+name: Health Intelligence Source Verification
+on:
+  push:
+  pull_request:
+jobs:
+  core-tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Xcode
+        run: xcodebuild -version
+      - name: Swift package unit tests
+        run: cd Core && swift test
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: ./Scripts/generate_xcode_project.sh
+      - name: Build iOS simulator without signing
+        run: |
+          set -o pipefail
+          xcodebuild -project HealthIntelligence.xcodeproj -scheme HealthIntelligence \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tee ios-build.log
+      - name: Build watchOS simulator without signing
+        run: |
+          set -o pipefail
+          xcodebuild -project HealthIntelligence.xcodeproj -scheme HealthWatch \
+            -destination 'generic/platform=watchOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tee watch-build.log
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: '*-build.log'
+          if-no-files-found: ignore
