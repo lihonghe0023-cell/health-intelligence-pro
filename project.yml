@@ -31,6 +31,13 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: "NO"
+    info:
+      properties:
+        # No launch storyboard: without this key iOS runs the app in
+        # 16:9 compatibility mode on 19.5:9 phones (black bars top and
+        # bottom in screenshots). An empty dict opts into the native
+        # screen size with a blank launch screen.
+        UILaunchScreen: {}
     entitlements:
       path: Configuration/iOS.entitlements
     dependencies:
