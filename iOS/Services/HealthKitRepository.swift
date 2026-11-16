@@ -1,0 +1,268 @@
+import Foundation
+import HealthKit
+import HealthCore
+
+/// HealthKit reads are independent of WatchConnectivity.
+/// Important: read access denial cannot be reliably distinguished from empty data.
+final class HealthKitRepository {
+    private let store = HKHealthStore()
+    var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
+
+    func requestAccess() async throws {
+        guard isAvailable else { throw HealthError.unavailable }
+        var read: Set<HKObjectType> = Set(HealthCatalog.all.map { $0.quantityType as HKObjectType })
+        read.insert(HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!)
+        read.insert(HKObjectType.electrocardiogramType())
+        for identifier in [HKCategoryTypeIdentifier.highHeartRateEvent,
+                           .lowHeartRateEvent, .irregularHeartRhythmEvent] {
+            if let type = HKObjectType.categoryType(forIdentifier: identifier) { read.insert(type) }
+        }
+        // Write permissions are limited to explicitly user-entered measurements.
+        let write: Set<HKSampleType> = [
+            HKObjectType.quantityType(forIdentifier: .bodyMass)!,
+            HKObjectType.quantityType(forIdentifier: .bloodGlucose)!,
+            HKObjectType.quantityType(forIdentifier: .bloodPressureSystolic)!,
+            HKObjectType.quantityType(forIdentifier: .bloodPressureDiastolic)!,
+            HKObjectType.correlationType(forIdentifier: .bloodPressure)!
+        ]
+        try await store.requestAuthorization(toShare: write, read: read)
+        // Successful completion means the sheet completed, not that reads were granted.
+    }
+
+    func reading(_ metric: HealthMetric) async throws -> MetricReading? {
+        let value: Double?
+        let date: Date
+        let source: String
+        switch metric.aggregation {
+        case .latest:
+            guard let sample = try await latestQuantity(metric.quantityType) else { return nil }
+            value = sample.quantity.doubleValue(for: metric.unit) * metric.multiplier
+            date = sample.endDate
+            source = sample.sourceRevision.source.name
+        case .sumToday:
+            let (total, end) = try await todaySum(metric.quantityType, unit: metric.unit)
+            value = total.map { $0 * metric.multiplier }
+            date = end
+            source = "HealthKit 日累计"
+        }
+        guard let value, value.isFinite else { return nil }
+        return MetricReading(id: metric.id, value: value, unit: metric.unitText,
+                             recordedAt: date, source: source)
+    }
+
+    /// One aggregated point per calendar day. This avoids silently truncating
+    /// high-frequency Series 12 readings after an arbitrary 120 raw samples.
+    func trend(_ metric: HealthMetric, days: Int = 30) async throws -> [TrendPoint] {
+        let calendar = Calendar.current
+        let anchor = calendar.startOfDay(for: Date())
+        guard let start = calendar.date(byAdding: .day, value: -(max(2, days) - 1), to: anchor) else { return [] }
+        let end = Date()
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let option: HKStatisticsOptions = metric.aggregation == .sumToday ? .cumulativeSum : .discreteAverage
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(quantityType: metric.quantityType,
+                                                     quantitySamplePredicate: predicate,
+                                                     options: option,
+                                                     anchorDate: anchor,
+                                                     intervalComponents: DateComponents(day: 1))
+            query.initialResultsHandler = { _, collection, error in
+                if let error { continuation.resume(throwing: error); return }
+                guard let collection else { continuation.resume(returning: []); return }
+                var result: [TrendPoint] = []
+                collection.enumerateStatistics(from: start, to: end) { statistics, _ in
+                    let quantity = option == .cumulativeSum ? statistics.sumQuantity() : statistics.averageQuantity()
+                    guard let quantity else { return }
+                    let value = quantity.doubleValue(for: metric.unit) * metric.multiplier
+                    guard value.isFinite else { return }
+                    result.append(TrendPoint(recordedAt: statistics.startDate, value: value))
+                }
+                continuation.resume(returning: result.sorted { $0.recordedAt < $1.recordedAt })
+            }
+            self.store.execute(query)
+        }
+    }
+
+    func sleepIntervals() async throws -> [SleepInterval] {
+        let since = Calendar.current.date(byAdding: .hour, value: -36, to: Date())!
+        let predicate = HKQuery.predicateForSamples(withStart: since, end: .now)
+        let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+        let samples = try await sampleQuery(type: sleepType, predicate: predicate, limit: 250)
+        return samples.compactMap { sample in
+            guard let sample = sample as? HKCategorySample,
+                  let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) else { return nil }
+            let stage: SleepStage
+            switch value {
+            case .asleepREM: stage = .rem
+            case .asleepCore: stage = .core
+            case .asleepDeep: stage = .deep
+            case .asleepUnspecified: stage = .unspecified
+            case .awake: stage = .awake
+            default: return nil // .inBed overlaps with actual stages
+            }
+            return SleepInterval(start: sample.startDate, end: sample.endDate, stage: stage)
+        }
+    }
+
+    func ecgSummaries() async throws -> [ECGSummary] {
+        let samples = try await sampleQuery(type: HKObjectType.electrocardiogramType(),
+                                            predicate: nil, limit: 20)
+        return samples.compactMap { sample in
+            guard let ecg = sample as? HKElectrocardiogram else { return nil }
+            return ECGSummary(id: ecg.uuid, recordedAt: ecg.startDate,
+                              classification: ecgDescription(ecg.classification),
+                              averageHeartRate: ecg.averageHeartRate?.doubleValue(for: HealthCatalog.pulseUnit))
+        }
+    }
+
+    /// System-generated heart notifications. Read-only and may be empty for permission reasons.
+    func heartEvents() async throws -> [HeartEvent] {
+        let kinds: [(HKCategoryTypeIdentifier, String)] = [
+            (.highHeartRateEvent, "系统高心率通知"),
+            (.lowHeartRateEvent, "系统低心率通知"),
+            (.irregularHeartRhythmEvent, "系统不规则心律通知")
+        ]
+        var result: [HeartEvent] = []
+        for (identifier, label) in kinds {
+            guard let type = HKObjectType.categoryType(forIdentifier: identifier) else { continue }
+            let samples = try await sampleQuery(type: type, predicate: nil, limit: 20)
+            for case let sample as HKCategorySample in samples {
+                result.append(HeartEvent(id: sample.uuid, type: label,
+                                         date: sample.endDate, source: sample.sourceRevision.source.name))
+            }
+        }
+        return result.sorted { $0.date > $1.date }.prefix(30).map { $0 }
+    }
+
+    /// Reads an existing ECG waveform on demand; does not trigger a new ECG measurement.
+    func ecgVoltagePoints(id: UUID) async throws -> [ECGVoltagePoint] {
+        let samples = try await sampleQuery(type: HKObjectType.electrocardiogramType(), predicate: nil, limit: 100)
+        guard let ecg = samples.compactMap({ $0 as? HKElectrocardiogram }).first(where: { $0.uuid == id })
+        else { return [] }
+        return try await withCheckedThrowingContinuation { continuation in
+            let lock = NSLock()
+            var points: [ECGVoltagePoint] = []
+            var completed = false
+            let query = HKElectrocardiogramQuery(ecg) { _, measurement, done, error in
+                lock.lock()
+                defer { lock.unlock() }
+                guard !completed else { return }
+                if let error {
+                    completed = true; continuation.resume(throwing: error); return
+                }
+                if let measurement,
+                   let quantity = measurement.quantity(for: .appleWatchSimilarToLeadI) {
+                    let value = quantity.doubleValue(for: .voltUnit(with: .milli))
+                    if value.isFinite {
+                        points.append(ECGVoltagePoint(seconds: measurement.timeSinceSampleStart,
+                                                      millivolts: value))
+                    }
+                }
+                if done {
+                    completed = true
+                    // Downsample for a responsive chart; full ECG export requires a dedicated audited path.
+                    let strideSize = max(1, points.count / 1600)
+                    continuation.resume(returning: Swift.stride(from: 0, to: points.count, by: strideSize).map { points[$0] })
+                }
+            }
+            store.execute(query)
+        }
+    }
+
+    func saveWeight(_ kg: Double) async throws {
+        guard (15...350).contains(kg) else { throw HealthError.invalidValue }
+        let type = HKObjectType.quantityType(forIdentifier: .bodyMass)!
+        let sample = HKQuantitySample(type: type,
+                                      quantity: HKQuantity(unit: .gramUnit(with: .kilo), doubleValue: kg),
+                                      start: Date(), end: Date())
+        try await save(sample)
+    }
+
+    func saveGlucose(_ mgdl: Double) async throws {
+        guard (20...800).contains(mgdl) else { throw HealthError.invalidValue }
+        let type = HKObjectType.quantityType(forIdentifier: .bloodGlucose)!
+        let now = Date()
+        let sample = HKQuantitySample(type: type,
+                                      quantity: HKQuantity(unit: HealthCatalog.mgdl, doubleValue: mgdl),
+                                      start: now, end: now)
+        try await save(sample)
+    }
+
+    func saveBloodPressure(systolic: Double, diastolic: Double) async throws {
+        guard (50...300).contains(systolic), (30...200).contains(diastolic), systolic > diastolic else {
+            throw HealthError.invalidValue
+        }
+        let now = Date()
+        let systolicSample = HKQuantitySample(type: HKObjectType.quantityType(forIdentifier: .bloodPressureSystolic)!,
+                                              quantity: HKQuantity(unit: .millimeterOfMercury(), doubleValue: systolic),
+                                              start: now, end: now)
+        let diastolicSample = HKQuantitySample(type: HKObjectType.quantityType(forIdentifier: .bloodPressureDiastolic)!,
+                                               quantity: HKQuantity(unit: .millimeterOfMercury(), doubleValue: diastolic),
+                                               start: now, end: now)
+        let correlation = HKCorrelation(type: HKObjectType.correlationType(forIdentifier: .bloodPressure)!,
+                                        start: now, end: now, objects: [systolicSample, diastolicSample])
+        try await save(correlation)
+    }
+
+    private func latestQuantity(_ type: HKQuantityType) async throws -> HKQuantitySample? {
+        let samples = try await sampleQuery(type: type, predicate: nil, limit: 1)
+        return samples.first as? HKQuantitySample
+    }
+
+    private func todaySum(_ type: HKQuantityType, unit: HKUnit) async throws -> (Double?, Date) {
+        let start = Calendar.current.startOfDay(for: .now)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: Date())
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate,
+                                          options: .cumulativeSum) { _, statistics, error in
+                if let error { continuation.resume(throwing: error); return }
+                continuation.resume(returning: (statistics?.sumQuantity()?.doubleValue(for: unit), Date()))
+            }
+            store.execute(query)
+        }
+    }
+
+    private func sampleQuery(type: HKSampleType, predicate: NSPredicate?, limit: Int) async throws -> [HKSample] {
+        try await withCheckedThrowingContinuation { continuation in
+            let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit,
+                                      sortDescriptors: sort) { _, samples, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: samples ?? []) }
+            }
+            store.execute(query)
+        }
+    }
+
+    private func save(_ sample: HKObject) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            store.save(sample) { success, error in
+                if let error { continuation.resume(throwing: error) }
+                else if success { continuation.resume(returning: ()) }
+                else { continuation.resume(throwing: HealthError.failedSave) }
+            }
+        }
+    }
+
+    private func ecgDescription(_ status: HKElectrocardiogram.Classification) -> String {
+        switch status {
+        case .sinusRhythm: return "窦性心律（系统分类）"
+        case .atrialFibrillation: return "房颤提示（系统分类）"
+        case .inconclusive: return "无法确定（系统分类）"
+        case .highHeartRate: return "心率偏高，无法分类"
+        case .lowHeartRate: return "心率偏低，无法分类"
+        case .poorReading: return "记录质量不足"
+        default: return "系统分类码：\(status.rawValue)"
+        }
+    }
+}
+
+enum HealthError: LocalizedError {
+    case unavailable, invalidValue, failedSave
+    var errorDescription: String? {
+        switch self {
+        case .unavailable: return "当前设备不提供 HealthKit 服务"
+        case .invalidValue: return "请输入合理的测量值，且收缩压应大于舒张压"
+        case .failedSave: return "保存失败，请检查健康写入权限"
+        }
+    }
+}
