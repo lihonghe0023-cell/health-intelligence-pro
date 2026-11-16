@@ -59,6 +59,16 @@ echo "slug: $SLUG"
 
 echo "== boot =="
 xcrun simctl boot "$UDID" 2>&1 || echo "(already booted or boot skipped)"
+echo "== wait for boot (bounded 120s) =="
+for i in $(seq 1 60); do
+    if xcrun simctl list devices available | grep "$UDID" | grep -q "(Booted)"; then
+        echo "booted after ~$((i * 2))s"
+        break
+    fi
+    sleep 2
+done
+xcrun simctl list devices available | grep "$UDID" | grep -q "(Booted)" \
+    || fail "watch simulator did not reach Booted state within 120s"
 
 echo "== install $APP_PATH =="
 xcrun simctl install "$UDID" "$APP_PATH" || fail "install failed"
