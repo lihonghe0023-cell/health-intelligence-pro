@@ -124,10 +124,13 @@ launch_and_verify() {
     fi
     echo "$out"
     local pid
-    pid=$(printf '%s' "$out" | head -1 | tr -d '[:space:]')
-    case "$pid" in ''|*[!0-9]*)
-        fail "could not parse a PID from simctl launch output ($label): $out" ;;
-    esac
+    # simctl launch prints "<bundle identifier>: <PID>", not a bare PID.
+    # Accept only a positive numeric PID at the end of that output.
+    if [[ "$out" =~ :[[:space:]]*([1-9][0-9]*)[[:space:]]*$ ]]; then
+        pid="${BASH_REMATCH[1]}"
+    else
+        fail "could not parse a PID from simctl launch output ($label): $out"
+    fi
     echo "launched pid: $pid"
     echo "== verify the same process is still running ($label) =="
     local out2 pid2
@@ -138,7 +141,11 @@ launch_and_verify() {
         out2=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1) \
             || fail "Watch app relaunch check failed ($label)"
     fi
-    pid2=$(printf '%s' "$out2" | head -1 | tr -d '[:space:]')
+    if [[ "$out2" =~ :[[:space:]]*([1-9][0-9]*)[[:space:]]*$ ]]; then
+        pid2="${BASH_REMATCH[1]}"
+    else
+        fail "could not parse a PID from simctl relaunch output ($label): $out2"
+    fi
     echo "relaunch pid: $pid2"
     [ "$pid2" = "$pid" ] \
         || fail "Watch app process did not stay running ($label): pid $pid became $pid2"
