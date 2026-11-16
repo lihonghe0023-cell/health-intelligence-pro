@@ -35,8 +35,13 @@ final class ScreenshotsTests: XCTestCase {
     }
 
     private func launch(light: Bool, largeText: Bool) {
-        XCUIDevice.shared.appearance = light ? .light : .dark
         app = XCUIApplication()
+        // Force the app process into light/dark via launch argument.
+        // XCUIDevice.shared.appearance is an async simulator-level change
+        // that did not reach the app in CI (#43/#48: dark and large-text
+        // shots were pixel-identical to light, 0.05%/0.03% diff).
+        // -AppleInterfaceStyle is applied at process launch, deterministic.
+        app.launchArguments += ["-AppleInterfaceStyle", light ? "Light" : "Dark"]
         // Reset onboarding so every mode starts at the welcome screen.
         app.launchArguments += ["-resetOnboardingForScreenshots"]
         if largeText {
