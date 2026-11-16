@@ -62,8 +62,25 @@ jobs:
           if [ -d UITestResults.xcresult ]; then
             xcrun xcresulttool export attachments --path UITestResults.xcresult --output-path screenshots \
               || echo "xcresulttool export failed, the xcresult is still uploaded below"
+            # xcresulttool writes UUID file names; normalize them to
+            # <mode>-<page>.png via the export manifest (copies only,
+            # sources kept) and verify all 21 decode at 1206x2622.
+            python3 Scripts/normalize_screenshots.py screenshots
           fi
           find screenshots -type f -name '*.png' | sort
+      - name: Cross-check full-screen capture
+        if: always()
+        run: |
+          # Ground truth for the device screen: simctl captures the real
+          # framebuffer (iPhone 17 Pro must be 1206x2622). If this and
+          # the XCTest shots disagree, the test capture — not the app —
+          # is framing wrong. Saved for the Verify step to compare.
+          xcrun simctl io booted screenshot screenshots/simctl-crosscheck.png \
+            || echo "WARNING: simctl screenshot failed (simulator may not be booted)"
+          if [ -f screenshots/simctl-crosscheck.png ]; then
+            python3 Scripts/png_check.py size screenshots/simctl-crosscheck.png 1206 2622 \
+              || echo "WARNING: simctl cross-check is not 1206x2622; see Verify step"
+          fi
       - name: Capture Watch screenshots
         if: always()
         run: |
@@ -80,16 +97,17 @@ jobs:
         run: |
           echo "== files =="
           find screenshots -type f | sort
-          echo "== counts (expect 7 light + 7 dark + 7 large-text + 2 watch) =="
-          for prefix in light dark large-text; do
-            n=$(find screenshots -type f -name "$prefix-*.png" | wc -l)
-            echo "$prefix: $n"
-            [ "$n" -eq 7 ] || { echo "FAIL: expected 7 $prefix screenshots, found $n"; exit 1; }
-          done
-          n=$(find screenshots -type f -name "watch-*.png" | wc -l)
-          echo "watch: $n"
-          [ "$n" -eq 2 ] || { echo "FAIL: expected 2 watch screenshots, found $n"; exit 1; }
-          [ -f screenshots/watch-manifest.json ] || { echo "FAIL: watch-manifest.json missing"; exit 1; }
+          echo "== normalized iPhone set (expect 21 at 1206x2622) =="
+          python3 Scripts/normalize_screenshots.py screenshots
+          echo "== watch manifest (strict JSON, numeric pids, real shots) =="
+          python3 Scripts/verify_watch_manifest.py screenshots
+          echo "== simctl cross-check =="
+          if [ -f screenshots/simctl-crosscheck.png ]; then
+            python3 Scripts/png_check.py size screenshots/simctl-crosscheck.png 1206 2622 \
+              || { echo "FAIL: simctl cross-check is not the iPhone 17 Pro full screen (1206x2622); the simulator rendered at the wrong size, so the XCTest shots cannot be trusted as full-screen evidence"; exit 1; }
+          else
+            echo "WARNING: simctl cross-check missing (UI tests may have failed before boot)"
+          fi
           echo "== non-empty check =="
           find screenshots -type f -name '*.png' -empty -print | grep . && { echo "FAIL: empty PNG present"; exit 1; } || echo "all PNGs non-empty"
           echo "OK: screenshot set complete"
