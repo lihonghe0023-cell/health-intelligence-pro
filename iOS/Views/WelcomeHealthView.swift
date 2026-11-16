@@ -21,8 +21,8 @@ struct WelcomeHealthView: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 7) {
                         Text("HEALTH INTELLIGENCE PRO")
-                            .font(.system(.caption, design: .rounded, weight: .bold))
-                            .tracking(1.5).foregroundStyle(HealthTheme.teal)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .tracking(2).foregroundStyle(HealthTheme.teal)
                         Text("读懂健康，从真实数据开始")
                             .font(.system(.largeTitle, design: .rounded, weight: .bold))
                             .foregroundStyle(HealthTheme.ink)
@@ -39,17 +39,17 @@ struct WelcomeHealthView: View {
                                 .font(.subheadline).foregroundStyle(HealthTheme.muted)
                         }
                     }
-                    Button {
+                    HealthPrimaryButton(
+                        title: health.isLoading ? "正在请求授权" : "连接 Apple 健康",
+                        icon: "heart.text.square.fill",
+                        state: health.isLoading ? .loading : .idle,
+                        disabled: !health.isHealthAvailable
+                    ) {
                         Task {
                             await health.connectAndRefresh()
                             complete()
                         }
-                    } label: {
-                        Label(health.isLoading ? "正在请求授权" : "连接 Apple 健康", systemImage: "heart.text.square.fill")
-                            .font(.headline).frame(maxWidth: .infinity, minHeight: 48)
                     }
-                    .buttonStyle(HealthPrimaryButtonStyle())
-                    .disabled(!health.isHealthAvailable || health.isLoading)
                     .accessibilityHint("打开苹果健康访问授权弹窗")
                     Button("先体验记录功能") { complete() }
                         .font(.subheadline.weight(.medium))

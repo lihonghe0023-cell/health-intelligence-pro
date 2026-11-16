@@ -45,12 +45,14 @@ struct OverviewView: View {
                                     .font(.headline).foregroundStyle(HealthTheme.ink)
                                 Text("授权后读取真实健康记录。未授权、没有记录或设备不支持时，都会保持空状态，不生成测试数值。")
                                     .font(.subheadline).foregroundStyle(HealthTheme.muted)
-                                Button { Task { await health.connectAndRefresh() } } label: {
-                                    Label("授权并读取数据", systemImage: "lock.open.fill")
-                                        .fontWeight(.semibold).frame(maxWidth: .infinity)
+                                HealthPrimaryButton(
+                                    title: health.isLoading ? "正在请求授权" : "授权并读取数据",
+                                    icon: "lock.open.fill",
+                                    state: health.isLoading ? .loading : .idle,
+                                    disabled: !health.isHealthAvailable
+                                ) {
+                                    Task { await health.connectAndRefresh() }
                                 }
-                                .buttonStyle(.borderedProminent).tint(HealthTheme.jade)
-                                .disabled(health.isLoading || !health.isHealthAvailable)
                             }
                         }
                     }
@@ -121,8 +123,8 @@ struct OverviewView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("HEALTH INTELLIGENCE")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .tracking(2.1).foregroundStyle(HealthTheme.teal)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .tracking(2).foregroundStyle(HealthTheme.teal)
                 Spacer()
                 HealthPill(title: "本机私密", icon: "lock.shield.fill")
             }
@@ -135,42 +137,38 @@ struct OverviewView: View {
     }
 
     private var hero: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(LinearGradient(colors: [Color(red: 0.035, green: 0.28, blue: 0.32),
-                                               Color(red: 0.045, green: 0.15, blue: 0.22)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            Circle().fill(.white.opacity(0.055)).frame(width: 210, height: 210)
-                .offset(x: 210, y: -110).blur(radius: 5)
-            VStack(alignment: .leading, spacing: 13) {
-                HStack(spacing: 8) {
-                    Circle().fill(HealthTheme.teal).frame(width: 7, height: 7)
-                    Text("HEALTH SNAPSHOT")
-                        .font(.caption2.weight(.bold)).tracking(2).foregroundStyle(.white.opacity(0.72))
-                    Spacer()
-                    Image(systemName: "heart.fill").foregroundStyle(.white.opacity(0.85))
-                }
-                Text("身体的变化，值得被看见。")
-                    .font(.system(.title3, design: .rounded, weight: .semibold))
-                    .foregroundStyle(.white)
-                PulseTrace().stroke(LinearGradient(colors: [.white.opacity(0.6), Color(red: 0.32, green: 0.91, blue: 0.75)], startPoint: .leading, endPoint: .trailing),
-                                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                    .frame(height: 58)
-                    .accessibilityHidden(true)
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("健康记录")
-                            .font(.caption2).foregroundStyle(.white.opacity(0.68))
-                        Text(health.readings.isEmpty ? "等待同步" : "\(health.readings.count) 项指标已读取")
-                            .font(.headline).foregroundStyle(.white)
+        HealthHero {
+            ZStack(alignment: .topLeading) {
+                Circle().fill(.white.opacity(0.055)).frame(width: 210, height: 210)
+                    .offset(x: 210, y: -110).blur(radius: 5)
+                VStack(alignment: .leading, spacing: 13) {
+                    HStack(spacing: 8) {
+                        Circle().fill(HealthTheme.teal).frame(width: 7, height: 7)
+                        Text("HEALTH SNAPSHOT")
+                            .font(.caption2.weight(.bold)).tracking(2).foregroundStyle(.white.opacity(0.72))
+                        Spacer()
+                        Image(systemName: "heart.fill").foregroundStyle(.white.opacity(0.85))
                     }
-                    Spacer()
-                    Text(health.lastRefreshedAt.map { "更新于 \($0.formatted(date: .omitted, time: .shortened))" } ?? "未读取")
-                        .font(.caption2).foregroundStyle(.white.opacity(0.72))
+                    Text("身体的变化，值得被看见。")
+                        .font(.system(.title3, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                    AbstractWave().stroke(LinearGradient(colors: [.white.opacity(0.6), HealthTheme.teal], startPoint: .leading, endPoint: .trailing),
+                                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                        .frame(height: 58)
+                        .accessibilityHidden(true)
+                    HStack(alignment: .lastTextBaseline) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("健康记录")
+                                .font(.caption2).foregroundStyle(.white.opacity(0.68))
+                            Text(health.readings.isEmpty ? "等待同步" : "\(health.readings.count) 项指标已读取")
+                                .font(.headline).foregroundStyle(.white)
+                        }
+                        Spacer()
+                        Text(health.lastRefreshedAt.map { "更新于 \($0.formatted(date: .omitted, time: .shortened))" } ?? "未读取")
+                            .font(.caption2).foregroundStyle(.white.opacity(0.72))
+                    }
                 }
-            }.padding(23)
+            }
         }
-        .frame(minHeight: 222)
-        .accessibilityElement(children: .combine)
     }
 }

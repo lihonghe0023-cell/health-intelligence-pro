@@ -4,9 +4,17 @@ import HealthCore
 struct SleepView: View {
     @EnvironmentObject private var health: HealthViewModel
     private let stages: [(SleepStage, Color)] = [
-        (.deep, HealthTheme.indigo), (.core, HealthTheme.sky),
-        (.rem, HealthTheme.teal), (.unspecified, HealthTheme.muted), (.awake, HealthTheme.amber)
+        (.deep, HealthTheme.stageColor(.deep)), (.core, HealthTheme.stageColor(.core)),
+        (.rem, HealthTheme.stageColor(.rem)), (.unspecified, HealthTheme.stageColor(.unspecified)), (.awake, HealthTheme.stageColor(.awake))
     ]
+    /// The statistic shown is the latest sample inside the latest sleep
+    /// session ("夜间最近一次"), never a daytime reading.
+    private var nightSubtitle: String {
+        guard let window = health.sleepWindow else { return "暂无睡眠记录" }
+        let start = window.lowerBound.formatted(.dateTime.month().day().hour().minute())
+        let end = window.upperBound.formatted(.dateTime.month().day().hour().minute())
+        return "本次睡眠 \(start) – \(end) · 夜间最近一次"
+    }
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -28,7 +36,7 @@ struct SleepView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("总睡眠").font(.caption).foregroundStyle(HealthTheme.muted)
                                     Text("\(summary.totalAsleepMinutes / 60) 小时 \(summary.totalAsleepMinutes % 60) 分")
-                                        .font(.system(size: 37, weight: .bold, design: .rounded)).foregroundStyle(HealthTheme.ink)
+                                        .font(.system(size: 36, weight: .bold, design: .rounded)).foregroundStyle(HealthTheme.ink)
                                 }
                                 GeometryReader { geometry in
                                     HStack(spacing: 3) {
@@ -62,12 +70,12 @@ struct SleepView: View {
                                 .font(.caption2).foregroundStyle(HealthTheme.muted)
                         }
                     }
-                    SectionHeadline(title: "夜间生命体征", subtitle: "需要手表或兼容设备产生记录")
+                    SectionHeadline(title: "夜间生命体征", subtitle: nightSubtitle)
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(["oxygenSaturation", "respiratoryRate", "sleepingWristTemperature", "appleSleepingBreathingDisturbances"], id: \.self) { id in
                             if let metric = HealthCatalog.byID[id] {
                                 NavigationLink { MetricDetailView(metric: metric) } label: {
-                                    MetricTile(metric: metric, reading: health.readings[id])
+                                    MetricTile(metric: metric, reading: health.nightReadings[id], emptyText: "无夜间记录")
                                 }.buttonStyle(.plain)
                             }
                         }

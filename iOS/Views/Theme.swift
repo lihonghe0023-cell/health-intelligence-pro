@@ -2,20 +2,37 @@ import SwiftUI
 import UIKit
 import HealthCore
 
-/// Health Intelligence Design System 1.0 — contrast-aware, dynamic and content first.
+/// Health Intelligence Design System 2.0 — contrast-aware, dynamic and content first.
+/// All colors resolve from HealthDesignTokens (HealthCore), the single source
+/// of truth; this enum only adapts them to SwiftUI.
 enum HealthTheme {
-    static let jade = Color(red: 0.07, green: 0.37, blue: 0.39)
-    static let teal = Color(red: 0.08, green: 0.62, blue: 0.56)
-    static let coral = Color(red: 0.88, green: 0.29, blue: 0.33)
-    static let indigo = Color(red: 0.36, green: 0.39, blue: 0.78)
-    static let amber = Color(red: 0.79, green: 0.48, blue: 0.19)
+    private static func color(_ token: HealthDesignTokens.Token) -> Color {
+        Color(uiColor: UIColor { traits in
+            let rgb = traits.userInterfaceStyle == .dark ? token.dark : token.light
+            return UIColor(red: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
+        })
+    }
+
+    static let jade = color(HealthDesignTokens.jade)
+    static let teal = color(HealthDesignTokens.teal)
+    static let coral = color(HealthDesignTokens.heart)
+    static let indigo = color(HealthDesignTokens.sleep)
+    static let sleep = color(HealthDesignTokens.sleep)
+    static let amber = color(HealthDesignTokens.amber)
     static let mint = teal
-    static let sky = Color(red: 0.36, green: 0.65, blue: 0.87)
-    static let ink = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.94, green: 0.97, blue: 0.97, alpha: 1) : UIColor(red: 0.08, green: 0.16, blue: 0.20, alpha: 1) })
-    static let muted = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.66, green: 0.73, blue: 0.75, alpha: 1) : UIColor(red: 0.40, green: 0.48, blue: 0.52, alpha: 1) })
-    static let canvas = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.055, green: 0.085, blue: 0.10, alpha: 1) : UIColor(red: 0.963, green: 0.972, blue: 0.967, alpha: 1) })
-    static let surface = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.105, green: 0.155, blue: 0.17, alpha: 1) : UIColor.white })
-    static let line = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.12) : UIColor(red: 0.84, green: 0.88, blue: 0.88, alpha: 1) })
+    static let sky = color(HealthDesignTokens.sky)
+    static let ink = color(HealthDesignTokens.ink)
+    static let muted = color(HealthDesignTokens.muted)
+    static let canvas = color(HealthDesignTokens.canvas)
+    static let surface = color(HealthDesignTokens.surface)
+    static let line = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.12) : UIColor(red: 0.839, green: 0.886, blue: 0.882, alpha: 1) })
+
+    /// Hero cards are intentionally dark in both schemes.
+    static let heroTop = Color(red: 0.035, green: 0.28, blue: 0.32)
+    static let heroBottom = Color(red: 0.045, green: 0.15, blue: 0.22)
+
+    /// Sleep stage color, shared with the Watch app through the same token.
+    static func stageColor(_ stage: SleepStage) -> Color { color(HealthDesignTokens.stageToken(for: stage)) }
 }
 
 struct HealthCard<Content: View>: View {
@@ -37,7 +54,7 @@ struct SectionHeadline: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.title3.weight(.bold)).foregroundStyle(HealthTheme.ink)
+                Text(title).font(.title3.weight(.semibold)).foregroundStyle(HealthTheme.ink)
                 if let subtitle { Text(subtitle).font(.caption).foregroundStyle(HealthTheme.muted) }
             }
             Spacer()
@@ -62,6 +79,9 @@ struct HealthPill: View {
 struct MetricTile: View {
     let metric: HealthMetric
     let reading: MetricReading?
+    /// Text shown when there is no reading. Night tiles pass their own
+    /// wording ("无夜间记录") instead of the generic authorization hint.
+    var emptyText = "暂无记录 · 可检查授权"
     var body: some View {
         HealthCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -75,7 +95,11 @@ struct MetricTile: View {
                     Image(systemName: "arrow.up.right")
                         .font(.caption2.weight(.bold)).foregroundStyle(HealthTheme.muted)
                 }
+                // Two lines of height even for one-line names, so tiles in a
+                // row keep the same height (Issue #1 item 7). minHeight does
+                // not cap growth under Dynamic Type.
                 Text(metric.name).font(.caption.weight(.medium)).foregroundStyle(HealthTheme.muted).lineLimit(2)
+                    .frame(minHeight: 32, alignment: .top)
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(reading.map { metric.display($0.value) } ?? "—")
                         .font(.system(size: 29, weight: .bold, design: .rounded))
@@ -86,9 +110,14 @@ struct MetricTile: View {
                         Text(metric.unitText).font(.caption2).foregroundStyle(HealthTheme.muted).lineLimit(1)
                     }
                 }
-                Text(reading.map { $0.recordedAt.formatted(date: .abbreviated, time: .shortened) }
-                     ?? "暂无记录 · 可检查授权")
-                    .font(.caption2).foregroundStyle(HealthTheme.muted).lineLimit(1)
+                // Time and source are always two lines, so a tile with no
+                // reading is exactly as tall as one with a reading.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(reading.map { $0.recordedAt.formatted(date: .abbreviated, time: .shortened) } ?? emptyText)
+                        .font(.caption2).foregroundStyle(HealthTheme.muted).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(reading.map { $0.source.isEmpty ? "来源未知" : $0.source } ?? "来源 —")
+                        .font(.caption2).foregroundStyle(HealthTheme.muted).lineLimit(1).minimumScaleFactor(0.8)
+                }
             }
         }
         .accessibilityElement(children: .combine)
@@ -104,14 +133,21 @@ struct MetricTile: View {
     }
 }
 
-struct PulseTrace: Shape {
+/// Abstract decorative wave for the Today hero. Deliberately smooth and
+/// sinusoidal: it must not read as an ECG trace or imply a real measurement.
+/// Static geometry, never driven by a live ECG sample, and hidden from
+/// assistive technologies.
+struct AbstractWave: Shape {
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        let points: [CGFloat] = [0.49,0.49,0.48,0.47,0.50,0.49,0.46,0.45,0.48,0.55,0.27,0.78,0.48,0.48,0.47,0.48,0.46,0.48,0.47,0.47]
-        for (i, v) in points.enumerated() {
-            let x = rect.minX + CGFloat(i) / CGFloat(points.count-1) * rect.width
-            let y = rect.minY + rect.height * v
-            if i == 0 { p.move(to: CGPoint(x:x,y:y)) } else { p.addLine(to: CGPoint(x:x,y:y)) }
+        let steps = 48
+        for i in 0...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let x = rect.minX + t * rect.width
+            // Two gentle swells, no sharp spikes.
+            let y = rect.midY + sin(t * .pi * 2) * rect.height * 0.18
+                + sin(t * .pi * 4 + 1.2) * rect.height * 0.07
+            if i == 0 { p.move(to: CGPoint(x: x, y: y)) } else { p.addLine(to: CGPoint(x: x, y: y)) }
         }
         return p
     }
@@ -137,6 +173,7 @@ struct EmptyHealthState: View {
 /// Shared primary action: minimum 48pt target, restrained press feedback and
 /// no scale animation when the user enables Reduce Motion.
 struct HealthPrimaryButtonStyle: ButtonStyle {
+    var state: PrimaryButtonState = .idle
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
 
@@ -146,11 +183,73 @@ struct HealthPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity, minHeight: 48)
             .padding(.horizontal, 16)
             .foregroundStyle(.white)
-            .background(isEnabled ? HealthTheme.jade : HealthTheme.muted,
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1.0)
             .opacity(configuration.isPressed ? 0.88 : 1)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: configuration.isPressed)
+    }
+
+    private var background: Color {
+        if !isEnabled { return HealthTheme.muted }
+        switch state {
+        case .success: return HealthTheme.teal
+        case .failure: return HealthTheme.coral
+        default: return HealthTheme.jade
+        }
+    }
+}
+
+/// Shared hero container (Issue #1 item 6): one radius (28pt, the official
+/// hero token), one padding (18pt), one gradient. The Today and Report
+/// heroes both use this; neither page sets its own radius or gradient.
+struct HealthHero<Content: View>: View {
+    let content: Content
+    init(@ViewBuilder content: () -> Content) { self.content = content() }
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(LinearGradient(colors: [HealthTheme.heroTop, HealthTheme.heroBottom],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            content.padding(18)
+        }
+        .frame(minHeight: 220)
+        .accessibilityElement(children: .combine)
+    }
+}
+/// The six states a primary action can be in. Pressed is handled by the
+/// style; success and failure are caller-owned (set after async work ends).
+enum PrimaryButtonState: Equatable {
+    case idle, loading, success, failure
+}
+
+/// Shared primary button component (Issue #1 item 5). Every primary action
+/// in the app uses this component so size, states and feedback stay uniform.
+struct HealthPrimaryButton: View {
+    let title: String
+    var icon: String? = nil
+    var state: PrimaryButtonState = .idle
+    var disabled: Bool = false
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if state == .loading {
+                    ProgressView().tint(.white)
+                } else if state == .success {
+                    Image(systemName: "checkmark.circle.fill")
+                } else if state == .failure {
+                    Image(systemName: "exclamationmark.circle.fill")
+                } else if let icon {
+                    Image(systemName: icon)
+                }
+                Text(title).fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(HealthPrimaryButtonStyle(state: state))
+        .disabled(disabled || state == .loading)
+        .accessibilityLabel(title)
     }
 }
 

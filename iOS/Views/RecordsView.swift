@@ -36,7 +36,7 @@ struct RecordsView: View {
                                         Text(metric.name)
                                         Text(health.readings[metric.id]?.recordedAt.formatted(date: .abbreviated, time: .omitted)
                                              ?? "暂无可读取记录")
-                                            .font(.caption).foregroundStyle(.secondary)
+                                            .font(.caption).foregroundStyle(HealthTheme.muted)
                                     }
                                     Spacer()
                                     Text(health.readings[metric.id].map { "\(metric.display($0.value)) \(metric.unitText)" } ?? "—")
@@ -49,13 +49,13 @@ struct RecordsView: View {
                 }
                 Section("个人健康日志") {
                     if journal.entries.isEmpty {
-                        Text("暂无笔记").foregroundStyle(.secondary)
+                        Text("暂无笔记").foregroundStyle(HealthTheme.muted)
                     }
                     ForEach(journal.entries) { entry in
                         VStack(alignment: .leading, spacing: 4) {
-                            HStack { Text(entry.category.rawValue).font(.caption).foregroundStyle(.secondary)
+                            HStack { Text(entry.category.rawValue).font(.caption).foregroundStyle(HealthTheme.muted)
                                 Spacer()
-                                Text(entry.timestamp, style: .date).font(.caption).foregroundStyle(.secondary)
+                                Text(entry.timestamp, style: .date).font(.caption).foregroundStyle(HealthTheme.muted)
                             }
                             Text(entry.title).font(.headline)
                             if !entry.detail.isEmpty { Text(entry.detail).font(.subheadline) }
@@ -101,7 +101,7 @@ struct ManualMeasurementView: View {
                     TextField("舒张压，例如 80", text: $value2).keyboardType(.decimalPad)
                 }
                 Text("仅写入你明确录入的测量数据；请按照真实测量结果填写，不要填估计值。")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote).foregroundStyle(HealthTheme.muted)
             }
             .navigationTitle("录入健康测量")
             .alert("保存失败", isPresented: Binding(
@@ -154,7 +154,7 @@ struct JournalEntryView: View {
                 TextField("记录详情", text: $detail, axis: .vertical)
                     .lineLimit(3...8)
                 Text("该笔记只保存在本机应用私有目录中。卸载 App 可能删除数据，请自行导出备份。")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote).foregroundStyle(HealthTheme.muted)
             }
             .navigationTitle("新增健康记录")
             .toolbar {

@@ -5,14 +5,12 @@ struct ReportView: View {
     @EnvironmentObject private var health: HealthViewModel
     @State private var exportURL: URL?
     @State private var exportError: String?
+    @State private var exportState: PrimaryButtonState = .idle
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 28).fill(LinearGradient(
-                            colors: [Color(red: 0.10, green: 0.27, blue: 0.38), HealthTheme.jade],
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                    HealthHero {
                         VStack(alignment: .leading, spacing: 14) {
                             Label("PRIVATE HEALTH REPORT", systemImage: "lock.shield.fill")
                                 .font(.caption2.weight(.bold)).tracking(1.3).foregroundStyle(.white.opacity(0.75))
@@ -22,8 +20,8 @@ struct ReportView: View {
                                 .font(.subheadline).foregroundStyle(.white.opacity(0.8))
                             Image(systemName: "doc.text.magnifyingglass")
                                 .font(.system(size: 38)).foregroundStyle(.white.opacity(0.8))
-                        }.padding(23)
-                    }.frame(minHeight: 220)
+                        }
+                    }
                     SectionHeadline(title: "本次健康观察", subtitle: "使用已读取数据的可解释规则")
                     ForEach(health.insights) { insight in
                         HealthCard {
@@ -40,17 +38,22 @@ struct ReportView: View {
                         Text("读取时间：\(refreshed.formatted())")
                             .font(.caption).foregroundStyle(HealthTheme.muted)
                     }
-                    Button {
+                    HealthPrimaryButton(
+                        title: exportState == .success ? "已生成 PDF" : "生成本地 PDF 健康摘要",
+                        icon: "square.and.arrow.up",
+                        state: exportState
+                    ) {
                         do {
                             exportURL = try PDFReportExporter.export(readings: health.readings,
                                                                      sleep: health.sleep,
-                                                                     insights: health.insights)
-                        } catch { exportError = error.localizedDescription }
-                    } label: {
-                        Label("生成本地 PDF 健康摘要", systemImage: "square.and.arrow.up")
-                            .fontWeight(.semibold).frame(maxWidth: .infinity)
+                                                                     insights: health.insights,
+                                                                     failedMetricIDs: health.failedMetricIDs)
+                            exportState = .success
+                        } catch {
+                            exportError = error.localizedDescription
+                            exportState = .failure
+                        }
                     }
-                    .buttonStyle(HealthPrimaryButtonStyle())
                     if let exportURL {
                         ShareLink(item: exportURL) {
                             Label("分享本次 PDF 报告", systemImage: "doc.richtext")
