@@ -30,6 +30,7 @@ private enum WatchPalette {
 struct WatchDashboard: View {
     @EnvironmentObject private var store: WatchHealthStore
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -50,6 +51,9 @@ struct WatchDashboard: View {
                     smallCard("呼吸频率", id: "respiratoryRate", unit: "次/分", symbol: "wind")
                     smallCard("静息心率", id: "restingHeartRate", unit: "次/分", symbol: "heart.text.square")
                 }
+                // Screenshot-test hook: launched with -watchScreenshotSleep,
+                // the dashboard opens scrolled to the sleep section so the
+                // sleep shot is a real app screen, not a scrolled guess.
                 VStack(alignment: .leading, spacing: 7) {
                     HStack {
                         Label("昨夜睡眠", systemImage: "moon.stars.fill")
@@ -83,6 +87,7 @@ struct WatchDashboard: View {
                 }.padding(11)
                  .frame(maxWidth: .infinity, alignment: .leading)
                  .background(Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 15))
+                 .id("sleepSection")
                 if store.isLoading { ProgressView().frame(maxWidth: .infinity) }
                 Button { Task { await store.authorize() } } label: {
                     Label("授权健康数据", systemImage: "lock.open.fill")
@@ -97,12 +102,20 @@ struct WatchDashboard: View {
                     .font(.system(size: 10)).foregroundStyle(WatchPalette.secondary)
             }.padding(.horizontal, 8).padding(.bottom, 10)
         }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-watchScreenshotSleep") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    withAnimation { proxy.scrollTo("sleepSection", anchor: .top) }
+                }
+            }
+        }
         .containerBackground(.black, for: .navigation)
         .alert("提示", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
         )) { Button("好的", role: .cancel) { store.errorMessage = nil } }
         message: { Text(store.errorMessage ?? "") }
+        }
     }
     private func stageColor(_ stage: SleepStage) -> Color {
         WatchPalette.color(HealthDesignTokens.stageToken(for: stage))
