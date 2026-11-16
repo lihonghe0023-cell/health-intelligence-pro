@@ -28,16 +28,16 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: "健康中枢"
         INFOPLIST_KEY_NSHealthShareUsageDescription: "用于读取您选择的心率、睡眠、体征和健康记录，并在本机呈现趋势。"
         INFOPLIST_KEY_NSHealthUpdateUsageDescription: "仅将您明确输入的血压、血糖和体重写入 Apple 健康。"
+        # Launch screen: without a launch screen key iOS runs the app in
+        # 16:9 compatibility mode on 19.5:9 phones (black bars top and
+        # bottom in screenshots). UILaunchStoryboardName is a plain string
+        # key, so it works with the generated Info.plist; UILaunchScreen
+        # is a dictionary and cannot be set via INFOPLIST_KEY, and an
+        # info: section without a path breaks XcodeGen parsing.
+        INFOPLIST_KEY_UILaunchStoryboardName: LaunchScreen
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: "NO"
-    info:
-      properties:
-        # No launch storyboard: without this key iOS runs the app in
-        # 16:9 compatibility mode on 19.5:9 phones (black bars top and
-        # bottom in screenshots). An empty dict opts into the native
-        # screen size with a blank launch screen.
-        UILaunchScreen: {}
     entitlements:
       path: Configuration/iOS.entitlements
     dependencies:
