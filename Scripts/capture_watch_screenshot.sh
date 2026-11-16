@@ -4,7 +4,31 @@
 # available) device. Writes both PNGs plus watch-manifest.json into the
 # output directory.
 # Usage: bash Scripts/capture_watch_screenshot.sh <HealthWatch.app path> <output dir>
-# Exits 0 only when both non-empty screenshots and the manifest exist.
+# Exits 0 only when both screenshots show real app content and the
+# manifest exists and parses as JSON. Any failure exits non-zero:
+# nothing in this script swallows a failure, and no function that can
+# fail is ever called inside a command substitution (an exit there
+# would only kill the subshell and the script would carry on with an
+# empty PID — the false-success hole found in #38).
+# Three gates prove each shot is genuine, plus two identity checks:
+#   1. simctl launch exits 0 and returns a numeric PID.
+#   2. Process: launching again must return the SAME pid (the first
+#      instance stayed alive); a different pid means it died and a new
+#      one started. Uses only simctl launch — see below on launchctl.
+#   3. Readiness: the screen must show real content (brightness gate),
+#      not the nearly all-black app-launch screen.
+#   4. Screen change: the shot must differ from the previous screen by
+#      at least 5% of pixels (diff gate). A crashed app leaves the watch
+#      face (or the previous screen) up, which differs by ~0%.
+#   5. Identity: the shot must be the expected device size and carry
+#      the app's signature mint accent (thousands of mint pixels on a
+#      rendered dashboard, zero on a loading screen).
+# Deliberately NOT used: `launchctl print gui/501/<bundle>` as a
+# running-state check. In run #38 it reported "not running" for both
+# launches while the sleep screenshot proves the app was running and
+# rendering — the check false-negatives in this environment, so it
+# cannot be a hard gate. The relaunch-pid check is the process proof
+# instead.
 # The Watch app is independent of the iPhone app, so only the watch app
 # is installed; HealthKit on the simulator returns no data, so both shots
 # show the honest empty state, never manufactured readings.
@@ -12,9 +36,12 @@ set -u
 APP_PATH="${1:?usage: capture_watch_screenshot.sh <HealthWatch.app path> <output dir>}"
 OUT_DIR="${2:?usage: capture_watch_screenshot.sh <HealthWatch.app path> <output dir>}"
 BUNDLE_ID="com.example.healthintelligence.watchkitapp"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$OUT_DIR"
 
 fail() { echo "FAIL: $1"; exit 1; }
+
+command -v python3 >/dev/null || fail "python3 is required for the screenshot readiness check"
 
 echo "== watch simulators =="
 xcrun simctl list devices available | grep -i "Apple Watch" || true
@@ -73,51 +100,167 @@ xcrun simctl list devices available | grep "$UDID" | grep -q "(Booted)" \
 echo "== install $APP_PATH =="
 xcrun simctl install "$UDID" "$APP_PATH" || fail "install failed"
 
-launch_and_check() {
-    # $1 = extra launch arg (may be empty), $2 = label for logs.
-    # Diagnostics go to stderr; only the launched PID goes to stdout.
-    local extra="$1" label="$2"
-    echo "== launch $BUNDLE_ID ($label) ==" >&2
-    local out status
+# Launches the app. Sets LAUNCH_PID. Called directly, never inside
+# $(...): a fail() here must kill the script, not just a subshell.
+# Process check: launching a second time must return the SAME pid.
+# simctl launch on an already-running app brings it to the front and
+# returns the existing process, so a different pid means the first
+# instance died and a new one started — the app did not stay running.
+# This uses only simctl launch itself: launchctl print gui/501/<bundle>
+# is not used, because in run #38 it reported "not running" for both
+# launches while the sleep screenshot proves the app was running and
+# rendering (a label/domain false negative).
+LAUNCH_PID=""
+launch_and_verify() {
+    local label="$1" extra="$2"
+    echo "== launch $BUNDLE_ID ($label) =="
+    local out
     if [ -n "$extra" ]; then
-        out=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" "$extra" 2>&1)
+        out=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" "$extra" 2>&1) \
+            || fail "Watch app failed to launch ($label)"
     else
-        out=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1)
+        out=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1) \
+            || fail "Watch app failed to launch ($label)"
     fi
-    status=$?
-    echo "$out" >&2
-    [ $status -eq 0 ] || fail "Watch app failed to launch ($label, exit $status)"
+    echo "$out"
     local pid
-    pid=$(printf '%s' "$out" | grep -oE '[0-9]+' | head -1)
-    echo "launched pid: $pid" >&2
-    sleep 6
-    echo "== verify the app itself is running ($label) ==" >&2
-    local state
-    state=$(xcrun simctl spawn "$UDID" launchctl print "gui/501/$BUNDLE_ID" 2>&1 || true)
-    echo "$state" >&2
-    echo "$state" | grep -q "state = running" || fail "Watch app is not running after launch ($label)"
-    printf '%s' "$pid"
+    pid=$(printf '%s' "$out" | head -1 | tr -d '[:space:]')
+    case "$pid" in ''|*[!0-9]*)
+        fail "could not parse a PID from simctl launch output ($label): $out" ;;
+    esac
+    echo "launched pid: $pid"
+    echo "== verify the same process is still running ($label) =="
+    local out2 pid2
+    if [ -n "$extra" ]; then
+        out2=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" "$extra" 2>&1) \
+            || fail "Watch app relaunch check failed ($label)"
+    else
+        out2=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1) \
+            || fail "Watch app relaunch check failed ($label)"
+    fi
+    pid2=$(printf '%s' "$out2" | head -1 | tr -d '[:space:]')
+    echo "relaunch pid: $pid2"
+    [ "$pid2" = "$pid" ] \
+        || fail "Watch app process did not stay running ($label): pid $pid became $pid2"
+    LAUNCH_PID="$pid"
 }
 
-shoot() {
-    # $1 = output png
-    xcrun simctl io "$UDID" screenshot "$1" || fail "screenshot failed ($1)"
-    [ -s "$1" ] || fail "empty screenshot ($1)"
-    echo "OK: $(wc -c < "$1") bytes -> $1"
+# Screenshots the screen before the app launches (the watch face).
+# Later shots must differ from it, which proves the app is really in
+# front instead of the face showing through after a crash. Best effort:
+# if the baseline cannot be captured, the diff check is skipped and
+# the other gates still apply.
+BASELINE_PNG="/tmp/watch-baseline.png"
+capture_baseline() {
+    local attempt
+    for attempt in 1 2 3; do
+        if xcrun simctl io "$UDID" screenshot "$BASELINE_PNG" 2>/dev/null && [ -s "$BASELINE_PNG" ]; then
+            echo "baseline captured (attempt $attempt)"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "WARNING: could not capture a baseline screenshot; the screen-change check will be skipped"
+    BASELINE_PNG=""
+}
+
+# Expected screenshot size for the chosen device, from its name.
+# 42mm Series 10/11: 374x446; 41mm: 352x430; 45mm: 396x484; 46mm: 410x502.
+# Unknown sizes skip the check with a warning rather than failing.
+expected_watch_size() {
+    case "$DEVICE_NAME" in
+        *42mm*) echo "374 446" ;;
+        *41mm*) echo "352 430" ;;
+        *45mm*) echo "396 484" ;;
+        *46mm*) echo "410 502" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Fails unless the screenshot is the expected device size and carries
+# the app's signature mint accent (the dashboard always does; a loading
+# screen carries zero mint pixels). Both are page-specific identifiers:
+# brightness alone cannot prove the screen is this app.
+check_shot_identity() {
+    local png="$1" label="$2"
+    local size
+    size=$(expected_watch_size)
+    if [ -n "$size" ]; then
+        python3 "$SCRIPT_DIR/png_check.py" size "$png" $size \
+            || fail "watch screenshot has the wrong size ($label)"
+    else
+        echo "WARNING: unknown device size for '$DEVICE_NAME'; size check skipped ($label)"
+    fi
+    python3 "$SCRIPT_DIR/png_check.py" color "$png" 32 178 150 60 100 \
+        || fail "watch screenshot shows no app mint accent ($label): not the app screen"
+}
+
+# Fails unless two screenshots differ by at least 5% of pixels.
+# A crashed app leaves the watch face (or the previous screen) up,
+# which differs from the new screen by ~0%; a rendered app differs a lot.
+check_screen_changed() {
+    local before="$1" after="$2" label="$3"
+    local result
+    if result=$(python3 "$SCRIPT_DIR/png_check.py" diff "$before" "$after" 5.0 2>&1); then
+        echo "screen changed ($label): $result"
+    else
+        fail "screen did not change after launch ($label): $result"
+    fi
+}
+
+# Screenshots until the screen shows real app content, then saves it.
+# The watchOS app-launch screen is nearly all black with a spinner;
+# the rendered dashboard always carries white text and colored accents.
+# Polls up to 60s and fails rather than saving a loading screen.
+shoot_when_ready() {
+    local final="$1" label="$2"
+    local tmp="/tmp/watch-shot-$label.png"
+    local attempt fraction
+    for attempt in $(seq 1 20); do
+        if xcrun simctl io "$UDID" screenshot "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+            if fraction=$(python3 "$SCRIPT_DIR/png_check.py" bright "$tmp" 1.0 2>&1); then
+                echo "ready ($label, attempt $attempt): $fraction"
+                mv "$tmp" "$final"
+                echo "OK: $(wc -c < "$final") bytes -> $final"
+                return 0
+            fi
+            echo "not ready yet ($label, attempt $attempt): $fraction"
+        else
+            echo "screenshot attempt $attempt failed ($label), retrying"
+        fi
+        sleep 3
+    done
+    fail "Watch app screen never showed real content within 60s ($label)"
 }
 
 HOME_PNG="$OUT_DIR/watch-home-$SLUG.png"
 SLEEP_PNG="$OUT_DIR/watch-sleep-$SLUG.png"
 
-HOME_PID=$(launch_and_check "" "home")
-shoot "$HOME_PNG"
+capture_baseline
+
+launch_and_verify "home" ""
+HOME_PID="$LAUNCH_PID"
+shoot_when_ready "$HOME_PNG" "home"
+check_shot_identity "$HOME_PNG" "home"
+if [ -n "$BASELINE_PNG" ]; then
+    check_screen_changed "$BASELINE_PNG" "$HOME_PNG" "home"
+fi
 
 echo "== relaunch for the sleep section =="
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>&1 || echo "(terminate skipped)"
-SLEEP_PID=$(launch_and_check "-watchScreenshotSleep" "sleep")
-sleep 2
-shoot "$SLEEP_PNG"
+launch_and_verify "sleep" "-watchScreenshotSleep"
+SLEEP_PID="$LAUNCH_PID"
+# Let the in-app scroll to the sleep section settle before the gate runs,
+# so the sleep shot cannot be the dashboard top by accident.
+sleep 3
+shoot_when_ready "$SLEEP_PNG" "sleep"
+check_shot_identity "$SLEEP_PNG" "sleep"
+# The sleep shot must differ from the home shot: this also proves the
+# scroll to the sleep section actually happened.
+check_screen_changed "$HOME_PNG" "$SLEEP_PNG" "sleep"
 
+case "$HOME_PID" in ''|*[!0-9]*) fail "bad home PID: $HOME_PID" ;; esac
+case "$SLEEP_PID" in ''|*[!0-9]*) fail "bad sleep PID: $SLEEP_PID" ;; esac
 HOME_BYTES=$(wc -c < "$HOME_PNG")
 SLEEP_BYTES=$(wc -c < "$SLEEP_PNG")
 printf '{\n  "device": "%s",\n  "runtime": "%s",\n  "mode": "dark",\n  "bundleId": "%s",\n  "home": {"file": "%s", "bytes": %s, "pid": %s},\n  "sleep": {"file": "%s", "bytes": %s, "pid": %s},\n  "note": "Simulator has no HealthKit data; both shots show the honest empty state."\n}\n' \
@@ -125,6 +268,8 @@ printf '{\n  "device": "%s",\n  "runtime": "%s",\n  "mode": "dark",\n  "bundleId
     "$(basename "$HOME_PNG")" "$HOME_BYTES" "$HOME_PID" \
     "$(basename "$SLEEP_PNG")" "$SLEEP_BYTES" "$SLEEP_PID" \
     > "$OUT_DIR/watch-manifest.json"
+python3 -m json.tool "$OUT_DIR/watch-manifest.json" > /dev/null \
+    || fail "watch-manifest.json failed JSON validation"
 echo "== manifest =="
 cat "$OUT_DIR/watch-manifest.json"
 echo "OK: watch home + sleep captured"
