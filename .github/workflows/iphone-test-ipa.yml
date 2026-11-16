@@ -21,9 +21,32 @@ jobs:
           xcodebuild -version
           git rev-parse HEAD
 
-      - name: Install XcodeGen and generate project
+      - name: Generate temporary iPhone-only Xcode project
         run: |
+          set -euo pipefail
           brew install xcodegen
+          # Only change the ephemeral CI workspace spec. Do not alter the
+          # repository's Watch target, its files, or the normal two-device CI.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("project.yml")
+          spec = path.read_text()
+          watch_dep = "      - target: HealthWatch\n        embed: true\n"
+          assert spec.count(watch_dep) == 1, "expected one Watch embed dependency"
+          spec = spec.replace(watch_dep, "", 1)
+          start = spec.index("\n  HealthWatch:\n")
+          end = spec.index("\n  HealthIntelligenceUITests:\n", start)
+          spec = spec[:start] + spec[end:]
+          # iPhone full-screen launch metadata. This is an iPhone packaging
+          # workaround, not a claim of visual QA or a source UI fix.
+          if "UILaunchScreen" not in spec:
+              marker = '        INFOPLIST_KEY_CFBundleDisplayName: "健康中枢"\n'
+              assert marker in spec
+              spec = spec.replace(marker,
+                  marker + '        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"\n', 1)
+          path.write_text(spec)
+          print("Generated temporary iPhone-only spec; Watch excluded")
+          PY
           bash Scripts/generate_xcode_project.sh
 
       - name: Build unsigned iPhone device app (arm64)
