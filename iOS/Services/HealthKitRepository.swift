@@ -142,7 +142,7 @@ final class HealthKitRepository {
             let lock = NSLock()
             var points: [ECGVoltagePoint] = []
             var completed = false
-            let query = HKElectrocardiogramQuery(ecg) { _, measurement, done, error in
+            let query = HKElectrocardiogramQuery(electrocardiogram: ecg) { _, measurement, done, error in
                 lock.lock()
                 defer { lock.unlock() }
                 guard !completed else { return }
@@ -234,7 +234,7 @@ final class HealthKitRepository {
     }
 
     private func save(_ sample: HKObject) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             store.save(sample) { success, error in
                 if let error { continuation.resume(throwing: error) }
                 else if success { continuation.resume(returning: ()) }
@@ -247,10 +247,12 @@ final class HealthKitRepository {
         switch status {
         case .sinusRhythm: return "窦性心律（系统分类）"
         case .atrialFibrillation: return "房颤提示（系统分类）"
-        case .inconclusive: return "无法确定（系统分类）"
-        case .highHeartRate: return "心率偏高，无法分类"
-        case .lowHeartRate: return "心率偏低，无法分类"
-        case .poorReading: return "记录质量不足"
+        case .inconclusiveOther: return "无法确定具体原因（系统分类）"
+        case .inconclusiveHighHeartRate: return "心率偏高，无法分类（系统分类）"
+        case .inconclusiveLowHeartRate: return "心率偏低，无法分类（系统分类）"
+        case .inconclusivePoorReading: return "记录质量不足（系统分类）"
+        case .unrecognized: return "当前系统无法识别该 ECG 分类"
+        case .notSet: return "系统尚未提供 ECG 分类"
         default: return "系统分类码：\(status.rawValue)"
         }
     }
