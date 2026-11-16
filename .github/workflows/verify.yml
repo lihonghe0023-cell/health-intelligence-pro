@@ -5,6 +5,7 @@ on:
 jobs:
   core-tests:
     runs-on: macos-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Inspect Xcode
@@ -37,6 +38,7 @@ jobs:
 
   screenshots:
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Inspect Xcode
