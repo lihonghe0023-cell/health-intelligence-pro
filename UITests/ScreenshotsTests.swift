@@ -73,9 +73,13 @@ final class ScreenshotsTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["心脏健康"].waitForExistence(timeout: 10))
         capture("heart", prefix: prefix)
 
-        // 6/7 records (empty state on the simulator).
+        // 6/7 records. The page is a List: rows below the fold (such as
+        // "暂无笔记" at the bottom) are not in the accessibility tree
+        // until scrolled to, so assert on the top of the page instead —
+        // the navigation title and the first section's button.
         tapTab("健康库")
-        XCTAssertTrue(app.staticTexts["暂无笔记"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["健康数据库"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["录入血压、血糖或体重"].waitForExistence(timeout: 10))
         capture("records", prefix: prefix)
 
         // 7/7 report.
