@@ -6,6 +6,30 @@ struct RootView: View {
     @AppStorage("onboardingComplete") private var onboardingComplete = false
     @State private var showOnboarding = false
 
+    // Screenshot-test hooks: the UI tests force a display mode via launch
+    // arguments because neither XCUIDevice.shared.appearance nor the
+    // -AppleInterfaceStyle launch argument reaches the app on CI (#43/#48/#49:
+    // dark and large-text shots were pixel-identical to light). These only
+    // apply when the arguments are present (i.e. only under UI tests);
+    // normal launches follow the system appearance and text size.
+    private var forcedColorScheme: ColorScheme? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-AppleInterfaceStyle"), i + 1 < args.count else { return nil }
+        return args[i + 1] == "Dark" ? .dark : .light
+    }
+    private var forcedDynamicTypeSize: DynamicTypeSize? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-UIPreferredContentSizeCategoryName"), i + 1 < args.count else { return nil }
+        switch args[i + 1] {
+        case "UICTContentSizeCategoryAccessibilityMedium": return .accessibility1
+        case "UICTContentSizeCategoryAccessibilityLarge": return .accessibility2
+        case "UICTContentSizeCategoryAccessibilityExtraLarge": return .accessibility3
+        case "UICTContentSizeCategoryAccessibilityExtraExtraLarge": return .accessibility4
+        case "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge": return .accessibility5
+        default: return .accessibility3
+        }
+    }
+
     var body: some View {
         TabView {
             OverviewView().tabItem { Label("今日", systemImage: "square.grid.2x2.fill") }
@@ -15,6 +39,8 @@ struct RootView: View {
             ReportView().tabItem { Label("报告", systemImage: "doc.text.image.fill") }
         }
         .tint(HealthTheme.teal)
+        .preferredColorScheme(forcedColorScheme)
+        .dynamicTypeSizeIfPresent(forcedDynamicTypeSize)
         .sheet(isPresented: $showOnboarding) { WelcomeHealthView() }
         .onAppear {
             // Screenshot-test hook: reset onboarding so each display mode
@@ -31,6 +57,20 @@ struct RootView: View {
         )) {
             Button("好的", role: .cancel) { health.message = nil }
         } message: { Text(health.message ?? "") }
+    }
+}
+
+/// Applies `.dynamicTypeSize` only when a size is forced (screenshot tests).
+/// When nil the view is returned unchanged so normal launches keep the
+/// user's system text size instead of being pinned to `.large`.
+private extension View {
+    @ViewBuilder
+    func dynamicTypeSizeIfPresent(_ size: DynamicTypeSize?) -> some View {
+        if let size {
+            self.dynamicTypeSize(size)
+        } else {
+            self
+        }
     }
 }
 
