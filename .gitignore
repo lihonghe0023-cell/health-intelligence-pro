@@ -1,0 +1,17 @@
+.DS_Store
+.build/
+Core/.build/
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xcarchive
+*.ipa
+*.p12
+*.mobileprovision
+*.cer
+*.key
+*.pem
+*.p8
+Secrets/
+.env
+HealthIntelligence.xcodeproj/
