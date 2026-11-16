@@ -7,6 +7,8 @@ import HealthCore
 final class WatchHealthStore: ObservableObject {
     @Published private(set) var readings: [String: MetricReading] = [:]
     @Published private(set) var sleep: SleepSummary?
+    /// Latest sleep session window, for the sleep section header.
+    @Published private(set) var sleepWindow: ClosedRange<Date>?
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
@@ -46,9 +48,9 @@ final class WatchHealthStore: ObservableObject {
                                        source: sample.sourceRevision.source.name)
         }
         readings = result
-        if let intervals = try? await latestSleepIntervals() {
-            sleep = intervals.isEmpty ? nil : SleepCalculator.summarize(intervals)
-        } else { sleep = nil }
+        let intervals = (try? await latestSleepIntervals()) ?? []
+        sleep = intervals.isEmpty ? nil : SleepCalculator.summarize(intervals)
+        sleepWindow = SleepSession.window(from: intervals)
         WatchStatusBridge.shared.sendRefreshDate(Date())
     }
 

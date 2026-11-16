@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import HealthCore
 
 @main
@@ -9,10 +10,22 @@ struct HealthWatchApp: App {
     }
 }
 
+/// Watch colors resolve from the same HealthDesignTokens as the iPhone app.
+/// The Watch is always dark, so the dark values apply.
 private enum WatchPalette {
-    static let mint = Color(red: 0.31, green: 0.92, blue: 0.79)
-    static let pink = Color(red: 1, green: 0.43, blue: 0.49)
+    static func color(_ token: HealthDesignTokens.Token) -> Color {
+        Color(uiColor: UIColor { traits in
+            let rgb = traits.userInterfaceStyle == .dark ? token.dark : token.light
+            return UIColor(red: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
+        })
+    }
+    static let mint = color(HealthDesignTokens.teal)
+    static let pink = color(HealthDesignTokens.heart)
+    static let amber = color(HealthDesignTokens.amber)
     static let secondary = Color.white.opacity(0.60)
+    /// Pulse card background: decorative dark gradient, not a semantic color.
+    static let pulseTop = Color(red: 0.22, green: 0.13, blue: 0.19)
+    static let pulseBottom = Color(red: 0.11, green: 0.12, blue: 0.15)
 }
 
 struct WatchDashboard: View {
@@ -50,6 +63,10 @@ struct WatchDashboard: View {
                             Text("暂无记录").font(.caption2).foregroundStyle(WatchPalette.secondary)
                         }
                     }
+                    if let window = store.sleepWindow {
+                        Text("\(window.lowerBound.formatted(.dateTime.hour().minute())) – \(window.upperBound.formatted(.dateTime.hour().minute()))")
+                            .font(.caption2).foregroundStyle(WatchPalette.secondary).lineLimit(1)
+                    }
                     if let sleep = store.sleep, sleep.totalAsleepMinutes > 0 {
                         GeometryReader { geo in
                             HStack(spacing: 2) {
@@ -72,6 +89,7 @@ struct WatchDashboard: View {
                     Label("授权健康数据", systemImage: "lock.open.fill")
                         .font(.caption.weight(.semibold)).frame(maxWidth: .infinity)
                 }.buttonStyle(.borderedProminent).tint(WatchPalette.mint).foregroundStyle(.black)
+                .disabled(store.isLoading)
                 Button { Task { await store.refresh() } } label: {
                     Label("刷新记录", systemImage: "arrow.clockwise")
                         .font(.caption.weight(.semibold)).frame(maxWidth: .infinity)
@@ -88,51 +106,90 @@ struct WatchDashboard: View {
         message: { Text(store.errorMessage ?? "") }
     }
     private func stageColor(_ stage: SleepStage) -> Color {
-        switch stage {
-        case .deep: return Color(red: 0.34, green: 0.37, blue: 0.90)
-        case .core: return Color(red: 0.40, green: 0.65, blue: 0.96)
-        case .rem: return Color(red: 0.67, green: 0.45, blue: 0.96)
-        case .awake: return Color(red: 0.96, green: 0.58, blue: 0.62)
-        case .unspecified: return Color.gray
-        }
+        WatchPalette.color(HealthDesignTokens.stageToken(for: stage))
     }
 
     private var pulseCard: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        let reading = store.readings["heartRate"]
+        let stale = isStale(reading)
+        return VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Label("心率", systemImage: "heart.fill")
                     .font(.caption).foregroundStyle(WatchPalette.pink)
                 Spacer()
-                Text("最近记录").font(.system(size: 9)).foregroundStyle(WatchPalette.secondary)
+                Text(stale ? "数据较旧" : "上次记录")
+                    .font(.system(size: 9)).foregroundStyle(stale ? WatchPalette.amber : WatchPalette.secondary)
             }
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(store.readings["heartRate"].map { String(Int($0.value.rounded())) } ?? "—")
+                Text(reading.map { String(Int($0.value.rounded())) } ?? "—")
                     .font(.system(size: 36, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    .minimumScaleFactor(0.7).lineLimit(1)
                 Text("BPM").font(.caption2).foregroundStyle(WatchPalette.secondary)
                 Spacer()
                 Image(systemName: "waveform.path.ecg")
                     .font(.title3).foregroundStyle(WatchPalette.pink)
             }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reading.map { "上次记录 \($0.recordedAt.formatted(date: .abbreviated, time: .shortened))" } ?? "暂无记录")
+                    .font(.caption2).foregroundStyle(WatchPalette.secondary).lineLimit(1).minimumScaleFactor(0.8)
+                Text(reading.map { $0.source.isEmpty ? "来源未知" : $0.source } ?? "来源 —")
+                    .font(.caption2).foregroundStyle(WatchPalette.secondary).lineLimit(1).minimumScaleFactor(0.8)
+            }
         }.padding(13)
          .frame(maxWidth: .infinity, alignment: .leading)
-         .background(LinearGradient(colors: [Color(red: 0.22, green: 0.13, blue: 0.19), Color(red: 0.11, green: 0.12, blue: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing),
+         .background(LinearGradient(colors: [WatchPalette.pulseTop, WatchPalette.pulseBottom], startPoint: .topLeading, endPoint: .bottomTrailing),
                      in: RoundedRectangle(cornerRadius: 18))
+         .accessibilityElement(children: .combine)
+         .accessibilityLabel(voiceOverLabel(id: "heartRate", title: "心率", unit: "次每分", reading: reading))
     }
     private func smallCard(_ title: String, id: String, unit: String, symbol: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let reading = store.readings[id]
+        let stale = isStale(reading)
+        return VStack(alignment: .leading, spacing: 6) {
             Image(systemName: symbol).foregroundStyle(WatchPalette.mint).font(.caption)
             Text(title).font(.system(size: 10)).foregroundStyle(WatchPalette.secondary).lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(store.readings[id].map { String(format: "%.1f", $0.value) } ?? "—")
+                Text(reading.map { String(format: "%.1f", $0.value) } ?? "—")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.6).lineLimit(1)
-                if store.readings[id] != nil {
+                if reading != nil {
                     Text(unit).font(.system(size: 8)).foregroundStyle(WatchPalette.secondary).lineLimit(1)
                 }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reading.map { (stale ? "较旧 · " : "") + "上次记录 " + relativeTime($0.recordedAt) } ?? "暂无记录")
+                    .font(.caption2).foregroundStyle(stale ? WatchPalette.amber : WatchPalette.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                Text(reading.map { $0.source.isEmpty ? "来源未知" : $0.source } ?? "来源 —")
+                    .font(.caption2).foregroundStyle(WatchPalette.secondary).lineLimit(1).minimumScaleFactor(0.6)
             }
             Spacer(minLength: 0)
         }
         .padding(11).frame(maxWidth: .infinity, minHeight: 91, alignment: .leading)
         .background(Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 15))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(voiceOverLabel(id: id, title: title, unit: unit, reading: reading))
+    }
+
+    /// A reading older than 24 hours is flagged as stale, in text as well as color.
+    private func isStale(_ reading: MetricReading?) -> Bool {
+        guard let reading else { return false }
+        return Date().timeIntervalSince(reading.recordedAt) > 24 * 3600
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func voiceOverLabel(id: String, title: String, unit: String, reading: MetricReading?) -> String {
+        guard let reading else { return "\(title)，暂无记录" }
+        let integerIDs = ["heartRate", "restingHeartRate"]
+        let value = integerIDs.contains(id) ? String(Int(reading.value.rounded())) : String(format: "%.1f", reading.value)
+        let time = reading.recordedAt.formatted(date: .abbreviated, time: .shortened)
+        let source = reading.source.isEmpty ? "来源未知" : reading.source
+        let stale = isStale(reading) ? "，数据较旧" : ""
+        return "\(title)，\(value) \(unit)，上次记录 \(time)，来源 \(source)\(stale)"
     }
 }
