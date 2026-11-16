@@ -88,11 +88,18 @@ final class ScreenshotsTests: XCTestCase {
         capture("report", prefix: prefix)
 
         // Button-tap evidence: back on Today, open a metric detail page
-        // and return. No extra screenshot; the assertions are the proof.
+        // and return. The tiles live in a LazyVGrid below the fold, so
+        // scroll until the tile exists; no extra screenshot, the
+        // assertions are the proof.
         tapTab("今日")
         let tile = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS %@", "静息心率")).firstMatch
-        XCTAssertTrue(tile.waitForExistence(timeout: 10), "resting heart rate tile missing")
+        var tileFound = false
+        for _ in 0..<3 {
+            if tile.waitForExistence(timeout: 3) { tileFound = true; break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(tileFound, "resting heart rate tile missing")
         tile.tap()
         XCTAssertTrue(app.staticTexts["历史趋势"].waitForExistence(timeout: 10))
         app.navigationBars.buttons.firstMatch.tap()
