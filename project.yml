@@ -60,3 +60,16 @@ targets:
       path: Configuration/Watch.entitlements
     dependencies:
       - package: HealthCore
+
+  HealthIntelligenceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.healthintelligence.uitests
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - target: HealthIntelligence
