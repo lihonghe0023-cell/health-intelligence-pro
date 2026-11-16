@@ -50,6 +50,21 @@ final class HealthKitRepository {
                              recordedAt: date, source: source)
     }
 
+    /// Latest sample of a `.latest` metric overlapping `window`, or nil when
+    /// no sample exists inside it. Never falls back to a sample outside the
+    /// window: a daytime reading must not stand in for a night reading.
+    /// Used for the sleep page, where `window` is the latest sleep session.
+    func reading(_ metric: HealthMetric, in window: ClosedRange<Date>) async throws -> MetricReading? {
+        guard metric.aggregation == .latest else { return nil }
+        let predicate = HKQuery.predicateForSamples(withStart: window.lowerBound, end: window.upperBound)
+        let samples = try await sampleQuery(type: metric.quantityType, predicate: predicate, limit: 1)
+        guard let sample = samples.first as? HKQuantitySample else { return nil }
+        let value = sample.quantity.doubleValue(for: metric.unit) * metric.multiplier
+        guard value.isFinite else { return nil }
+        return MetricReading(id: metric.id, value: value, unit: metric.unitText,
+                             recordedAt: sample.endDate, source: sample.sourceRevision.source.name)
+    }
+
     /// One aggregated point per calendar day. This avoids silently truncating
     /// high-frequency Series 12 readings after an arbitrary 120 raw samples.
     func trend(_ metric: HealthMetric, days: Int = 30) async throws -> [TrendPoint] {

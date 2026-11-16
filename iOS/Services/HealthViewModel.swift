@@ -7,6 +7,16 @@ final class HealthViewModel: ObservableObject {
     @Published private(set) var readings: [String: MetricReading] = [:]
     @Published private(set) var trends: [String: [TrendPoint]] = [:]
     @Published private(set) var sleep: SleepSummary?
+    /// Latest sleep session window, derived from the same intervals that
+    /// produce `sleep`. Nil when there is no sleep record.
+    @Published private(set) var sleepWindow: ClosedRange<Date>?
+    /// Night vitals: latest sample of each night metric whose record falls
+    /// inside `sleepWindow`. Never falls back to a daytime reading.
+    @Published private(set) var nightReadings: [String: MetricReading] = [:]
+    /// Metric IDs whose HealthKit query threw (a read error, not empty data).
+    /// Empty data and a denied read look identical by HealthKit design and
+    /// are NOT recorded here.
+    @Published private(set) var failedMetricIDs: [String] = []
     @Published private(set) var ecgs: [ECGSummary] = []
     @Published private(set) var heartEvents: [HeartEvent] = []
     @Published private(set) var ecgVoltages: [UUID: [ECGVoltagePoint]] = [:]
@@ -42,16 +52,40 @@ final class HealthViewModel: ObservableObject {
             (priority.firstIndex(of: $0.id) ?? Int.max) < (priority.firstIndex(of: $1.id) ?? Int.max)
         }
         var newReadings: [String: MetricReading] = [:]
+        var failures: [String] = []
         for metric in ordered {
-            if let reading = try? await repository.reading(metric) {
-                newReadings[metric.id] = reading
+            do {
+                if let reading = try await repository.reading(metric) {
+                    newReadings[metric.id] = reading
+                }
+            } catch {
+                // A thrown query is a read error. A denied read and no record
+                // can look identical by HealthKit design, so they stay out.
+                failures.append(metric.id)
             }
-            // A denied read and no record can look identical by HealthKit design.
         }
         readings = newReadings
-        if let intervals = try? await repository.sleepIntervals() {
+        failedMetricIDs = failures
+        let nightIDs = ["oxygenSaturation", "respiratoryRate", "sleepingWristTemperature", "appleSleepingBreathingDisturbances"]
+        do {
+            let intervals = try await repository.sleepIntervals()
             sleep = intervals.isEmpty ? nil : SleepCalculator.summarize(intervals)
-        } else { sleep = nil }
+            sleepWindow = SleepSession.window(from: intervals)
+            var nights: [String: MetricReading] = [:]
+            if let window = sleepWindow {
+                for id in nightIDs {
+                    if let metric = HealthCatalog.byID[id],
+                       let reading = try? await repository.reading(metric, in: window) {
+                        nights[id] = reading
+                    }
+                }
+            }
+            nightReadings = nights
+        } catch {
+            sleep = nil
+            sleepWindow = nil
+            nightReadings = [:]
+        }
         ecgs = (try? await repository.ecgSummaries()) ?? []
         heartEvents = (try? await repository.heartEvents()) ?? []
         lastRefreshedAt = .now
