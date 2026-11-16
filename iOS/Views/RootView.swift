@@ -16,7 +16,15 @@ struct RootView: View {
         }
         .tint(HealthTheme.teal)
         .sheet(isPresented: $showOnboarding) { WelcomeHealthView() }
-        .onAppear { if !onboardingComplete { showOnboarding = true } }
+        .onAppear {
+            // Screenshot-test hook: reset onboarding so each display mode
+            // starts at the welcome screen. Only active when the test
+            // passes -resetOnboardingForScreenshots as a launch argument.
+            if ProcessInfo.processInfo.arguments.contains("-resetOnboardingForScreenshots") {
+                onboardingComplete = false
+            }
+            if !onboardingComplete { showOnboarding = true }
+        }
         .alert("提示", isPresented: Binding(
             get: { health.message != nil },
             set: { if !$0 { health.message = nil } }

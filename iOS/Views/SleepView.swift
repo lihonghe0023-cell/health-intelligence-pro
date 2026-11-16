@@ -38,6 +38,8 @@ struct SleepView: View {
                                     Text("\(summary.totalAsleepMinutes / 60) 小时 \(summary.totalAsleepMinutes % 60) 分")
                                         .font(.system(size: 36, weight: .bold, design: .rounded)).foregroundStyle(HealthTheme.ink)
                                 }
+                                // Decorative bar: the legend below carries the
+                                // same stage minutes as text, so VoiceOver skips it.
                                 GeometryReader { geometry in
                                     HStack(spacing: 3) {
                                         ForEach(stages, id: \.0) { entry in
@@ -51,7 +53,7 @@ struct SleepView: View {
                                             }
                                         }
                                     }
-                                }.frame(height: 15)
+                                }.frame(height: 15).accessibilityHidden(true)
                                 ForEach(stages, id: \.0) { entry in
                                     let stage = entry.0
                                     let tint = entry.1

@@ -112,12 +112,15 @@ struct ECGDetailView: View {
                         if health.isECGLoading {
                             ProgressView("读取心电信号…").frame(maxWidth: .infinity, minHeight: 170)
                         } else if let points = health.ecgVoltages[ecg.id], !points.isEmpty {
+                            // The waveform is visual only; its meaning (the
+                            // classification and recording time above) is
+                            // already text, so VoiceOver skips the chart.
                             Chart(points) { point in
                                 LineMark(x: .value("时间 / 秒", point.seconds),
                                          y: .value("电压 / mV", point.millivolts))
                                     .lineStyle(StrokeStyle(lineWidth: 1.1))
                                     .foregroundStyle(HealthTheme.coral)
-                            }.frame(height: 230)
+                            }.frame(height: 230).accessibilityHidden(true)
                             Text("信号已抽样用于图表显示，非医学级校准导出。")
                                 .font(.caption2).foregroundStyle(HealthTheme.muted)
                         } else {
