@@ -115,7 +115,13 @@ final class ScreenshotsTests: XCTestCase {
 
     private func capture(_ page: String, prefix: String) {
         Thread.sleep(forTimeInterval: 1)
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        // Full device screen, not just the app window: the visual gate
+        // needs the true complete screen (status bar included). An
+        // app.screenshot() capture came back 960x1440 on CI — not the
+        // iPhone 17 Pro full screen (1206x2622) — with a black top area
+        // and content clipped at the right edge, so it cannot stand as
+        // 7/7 evidence. XCUIScreen captures the whole screen buffer.
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "\(prefix)-\(page)"
         attachment.lifetime = .keepAlways
         add(attachment)
