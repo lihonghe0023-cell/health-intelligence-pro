@@ -17,6 +17,20 @@ final class HealthKitRepository {
                            .lowHeartRateEvent, .irregularHeartRhythmEvent] {
             if let type = HKObjectType.categoryType(forIdentifier: identifier) { read.insert(type) }
         }
+        // Launch requests read-only access. Write permissions are requested
+        // lazily, only when the user actually saves a measurement, so a
+        // problem with a write type cannot crash the app on launch.
+        // (2026-11-17: requesting the write set on launch crashed on a real
+        // device with _throwIfAuthorizationDisallowedForSharing, before any
+        // data was read.)
+        try await store.requestAuthorization(toShare: [], read: read)
+        // Successful completion means the sheet completed, not that reads were granted.
+    }
+
+    /// Requests write authorization for user-entered measurements only.
+    /// Called lazily from the save functions, never on launch.
+    func requestWriteAccess() async throws {
+        guard isAvailable else { throw HealthError.unavailable }
         // Write permissions are limited to explicitly user-entered measurements.
         let write: Set<HKSampleType> = [
             HKObjectType.quantityType(forIdentifier: .bodyMass)!,
@@ -25,8 +39,7 @@ final class HealthKitRepository {
             HKObjectType.quantityType(forIdentifier: .bloodPressureDiastolic)!,
             HKObjectType.correlationType(forIdentifier: .bloodPressure)!
         ]
-        try await store.requestAuthorization(toShare: write, read: read)
-        // Successful completion means the sheet completed, not that reads were granted.
+        try await store.requestAuthorization(toShare: write, read: [])
     }
 
     func reading(_ metric: HealthMetric) async throws -> MetricReading? {
@@ -185,6 +198,7 @@ final class HealthKitRepository {
 
     func saveWeight(_ kg: Double) async throws {
         guard (15...350).contains(kg) else { throw HealthError.invalidValue }
+        try await requestWriteAccess()
         let type = HKObjectType.quantityType(forIdentifier: .bodyMass)!
         let sample = HKQuantitySample(type: type,
                                       quantity: HKQuantity(unit: .gramUnit(with: .kilo), doubleValue: kg),
@@ -194,6 +208,7 @@ final class HealthKitRepository {
 
     func saveGlucose(_ mgdl: Double) async throws {
         guard (20...800).contains(mgdl) else { throw HealthError.invalidValue }
+        try await requestWriteAccess()
         let type = HKObjectType.quantityType(forIdentifier: .bloodGlucose)!
         let now = Date()
         let sample = HKQuantitySample(type: type,
@@ -206,6 +221,7 @@ final class HealthKitRepository {
         guard (50...300).contains(systolic), (30...200).contains(diastolic), systolic > diastolic else {
             throw HealthError.invalidValue
         }
+        try await requestWriteAccess()
         let now = Date()
         let systolicSample = HKQuantitySample(type: HKObjectType.quantityType(forIdentifier: .bloodPressureSystolic)!,
                                               quantity: HKQuantity(unit: .millimeterOfMercury(), doubleValue: systolic),
