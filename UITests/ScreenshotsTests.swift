@@ -96,16 +96,22 @@ final class ScreenshotsTests: XCTestCase {
         // and return. The tiles live in a LazyVGrid below the fold, so
         // scroll until the tile exists; no extra screenshot, the
         // assertions are the proof.
-        // NOTE (V3): find the tile by its accessibility identifier, not
-        // by label text. The Hero quick-stats row also shows "静息心率"
-        // as a static text (tapping it does nothing), and the tile
-        // buttons' accessibility labels do not contain the metric name
-        // (V3Card exposes children separately). The resting-heart-rate
-        // tile carries identifier "metric-tile-restingHeartRate".
+        // NOTE (V3): find the tile by label OR identifier. The Hero
+        // quick-stats row also shows "静息心率" as a static text
+        // (tapping it does nothing), and the tile buttons' default
+        // accessibility labels do not contain the metric name (V3Card
+        // exposes children separately). The resting-heart-rate tile
+        // carries identifier "metric-tile-restingHeartRate" and an
+        // explicit label "静息心率" (set in TodayView). The vitals
+        // section sits below the Hero, connect card and five module
+        // cards, so allow up to 6 scroll attempts to reach it.
         tapTab("今日")
-        let tile = app.buttons["metric-tile-restingHeartRate"]
+        let tile = app.buttons.matching(NSPredicate(
+            format: "label == %@ OR identifier == %@",
+            "静息心率", "metric-tile-restingHeartRate"
+        )).firstMatch
         var tileFound = false
-        for _ in 0..<3 {
+        for _ in 0..<6 {
             if tile.waitForExistence(timeout: 3) { tileFound = true; break }
             app.swipeUp()
         }
