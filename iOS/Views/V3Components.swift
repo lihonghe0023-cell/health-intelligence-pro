@@ -33,7 +33,8 @@ struct V3Hero<Content: View>: View {
         content
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(heroBackground, in: RoundedRectangle(cornerRadius: HealthTheme.v3HeroRadius, style: .continuous))
+            .background(heroBackground)
+            .clipShape(RoundedRectangle(cornerRadius: HealthTheme.v3HeroRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: HealthTheme.v3HeroRadius, style: .continuous)
                     .strokeBorder(HealthTheme.v3Line.opacity(0.5), lineWidth: 0.7)
