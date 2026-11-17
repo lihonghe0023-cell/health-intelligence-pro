@@ -26,6 +26,30 @@ public enum SleepCalculator {
                             minutesAwake: minutes[.awake] ?? 0)
     }
 
+    /// Deduplicated time-ordered segments for the sleep stage timeline.
+    /// Same sweep as `summarize` (same stage precedence for conflicting
+    /// sources), but keeps the (start, end, stage) pieces instead of
+    /// collapsing them to minutes. Adjacent pieces with the same stage
+    /// are merged. Returns [] when there is no usable interval.
+    public static func segments(_ intervals: [SleepInterval]) -> [SleepInterval] {
+        let valid = intervals.filter { $0.end > $0.start }
+        let timePoints = Array(Set(valid.flatMap { [$0.start, $0.end] })).sorted()
+        guard timePoints.count >= 2 else { return [] }
+        var pieces: [SleepInterval] = []
+        for i in 0..<(timePoints.count - 1) {
+            let start = timePoints[i], end = timePoints[i + 1]
+            guard end > start else { continue }
+            let active = valid.filter { $0.start < end && $0.end > start }
+            guard let winningStage = active.map(\.stage).max(by: { priority($0) < priority($1) }) else { continue }
+            if let last = pieces.last, last.stage == winningStage, last.end == start {
+                pieces[pieces.count - 1] = SleepInterval(start: last.start, end: end, stage: winningStage)
+            } else {
+                pieces.append(SleepInterval(start: start, end: end, stage: winningStage))
+            }
+        }
+        return pieces
+    }
+
     private static func priority(_ stage: SleepStage) -> Int {
         switch stage {
         case .unspecified: return 0
