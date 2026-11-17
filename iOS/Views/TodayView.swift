@@ -239,6 +239,11 @@ struct TodayView: View {
                             MetricCard(metric: metric, reading: health.readings[id])
                         }
                         .buttonStyle(.plain)
+                        // Stable identifier for UI tests: the card's
+                        // accessibility label is not the metric name
+                        // (V3Card exposes children separately), so the
+                        // screenshot test finds the tile by this id.
+                        .accessibilityIdentifier("metric-tile-\(id)")
                     }
                 }
             }
