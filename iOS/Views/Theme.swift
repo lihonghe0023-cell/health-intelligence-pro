@@ -268,3 +268,65 @@ struct HealthSourceBadge: View {
         .accessibilityLabel("数据来自\(source)，记录于\(date.formatted())")
     }
 }
+
+// MARK: - V3 dual-theme tokens (GitHub Issue #2)
+//
+// Light mode: glacier white / mist blue. Dark mode: deep sea blue.
+// Semantic base hexes are the same in both modes; TEXT in light mode uses
+// the darkened variants (see DesignTokens.V3Semantic) so contrast stays
+// >= 4.5:1. Muted text passes on card/canvas in light mode (4.97/4.71:1)
+// but is 4.45:1 on the secondary background, so never put muted text on
+// v3SurfaceSecondary.
+extension HealthTheme {
+    static let v3Canvas = color(HealthDesignTokens.v3Canvas)
+    static let v3SurfaceSecondary = color(HealthDesignTokens.v3SurfaceSecondary)
+    static let v3Card = color(HealthDesignTokens.v3Card)
+    static let v3Ink = color(HealthDesignTokens.v3Ink)
+    static let v3Muted = color(HealthDesignTokens.v3Muted)
+    static let v3Line = color(HealthDesignTokens.v3Line)
+
+    private static func v3Base(_ semantic: HealthDesignTokens.V3Semantic) -> Color {
+        Color(red: semantic.base.red, green: semantic.base.green, blue: semantic.base.blue)
+    }
+
+    private static func v3Text(_ semantic: HealthDesignTokens.V3Semantic) -> Color {
+        Color(uiColor: UIColor { traits in
+            let rgb = traits.userInterfaceStyle == .dark ? semantic.textDark : semantic.textLight
+            return UIColor(red: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
+        })
+    }
+
+    // Semantic base colors: rings, fills, icons (same hex both modes).
+    static let v3Brand = v3Base(HealthDesignTokens.v3Brand)
+    static let v3Sleep = v3Base(HealthDesignTokens.v3Sleep)
+    static let v3Recovery = v3Base(HealthDesignTokens.v3Recovery)
+    static let v3Stress = v3Base(HealthDesignTokens.v3Stress)
+    static let v3Energy = v3Base(HealthDesignTokens.v3Energy)
+    static let v3Load = v3Base(HealthDesignTokens.v3Load)
+    static let v3Risk = v3Base(HealthDesignTokens.v3Risk)
+
+    // Semantic text colors: darkened in light mode, base in dark mode.
+    static let v3BrandText = v3Text(HealthDesignTokens.v3Brand)
+    static let v3SleepText = v3Text(HealthDesignTokens.v3Sleep)
+    static let v3RecoveryText = v3Text(HealthDesignTokens.v3Recovery)
+    static let v3StressText = v3Text(HealthDesignTokens.v3Stress)
+    static let v3EnergyText = v3Text(HealthDesignTokens.v3Energy)
+    static let v3LoadText = v3Text(HealthDesignTokens.v3Load)
+    static let v3RiskText = v3Text(HealthDesignTokens.v3Risk)
+
+    // MARK: V3 layout (8pt grid)
+    static let v3CardRadius: CGFloat = 20
+    static let v3HeroRadius: CGFloat = 28
+    static let v3ButtonRadius: CGFloat = 16
+    static let v3Margin: CGFloat = 20
+    static let v3Grid: CGFloat = 8
+    static let v3ButtonHeight: CGFloat = 48
+    static let v3MinTap: CGFloat = 44
+
+    // MARK: V3 type (system sizes; Dynamic Type scales them)
+    static let v3TitleFont: Font = .system(size: 28, weight: .bold, design: .rounded)
+    static let v3HeadlineFont: Font = .system(size: 22, weight: .bold, design: .rounded)
+    static let v3SectionFont: Font = .system(size: 18, weight: .semibold, design: .rounded)
+    static let v3BodyFont: Font = .system(size: 16, weight: .regular)
+    static let v3AuxFont: Font = .system(size: 13, weight: .regular)
+}

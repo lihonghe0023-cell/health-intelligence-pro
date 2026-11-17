@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var health: HealthViewModel
     @EnvironmentObject private var journal: JournalStore
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("themePreference") private var themePreference: AppThemePreference = .system
     @State private var showDeleteConfirmation = false
 
     var body: some View {
@@ -21,6 +22,16 @@ struct SettingsView: View {
                                 .font(.caption).foregroundStyle(HealthTheme.muted)
                         }
                     }.padding(.vertical, 5)
+                }
+                Section("外观") {
+                    Picker("主题", selection: $themePreference) {
+                        ForEach(AppThemePreference.allCases) { pref in
+                            Text(pref.title).tag(pref)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Text("跟随系统会随 iPhone 的浅色/深色设置自动切换；切换主题不会重新加载数据或丢失当前页面。")
+                        .font(.footnote).foregroundStyle(HealthTheme.muted)
                 }
                 Section("Apple 健康") {
                     LabeledContent("当前设备支持", value: health.isHealthAvailable ? "是" : "否")
