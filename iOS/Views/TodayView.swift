@@ -15,7 +15,6 @@ struct TodayView: View {
     var onOpenSleepTab: () -> Void = {}
 
     private let primary = ["restingHeartRate", "hrv", "oxygenSaturation", "respiratoryRate"]
-    private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
 
     private var resolvedColorScheme: ColorScheme? {
         ThemeResolver.resolvedColorScheme(preference: themePreference)
@@ -230,25 +229,45 @@ struct TodayView: View {
     private var vitalsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             V3SectionHeadline(title: "核心生命体征", subtitle: "数据直接来自 Apple 健康")
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(primary, id: \.self) { id in
-                    if let metric = HealthCatalog.byID[id] {
-                        NavigationLink {
-                            MetricDetailView(metric: metric)
-                        } label: {
-                            MetricCard(metric: metric, reading: health.readings[id])
-                        }
-                        .buttonStyle(.plain)
-                        // Stable identifier for UI tests: the card's
-                        // accessibility label is not the metric name
-                        // (V3Card exposes children separately), so the
-                        // screenshot test finds the tile by this id.
-                        .accessibilityIdentifier("metric-tile-\(id)")
-                        // Explicit button label, so the tile is also
-                        // findable by its metric name ("静息心率").
-                        .accessibilityLabel(metric.name)
-                    }
+            // Eager 2-column grid, not LazyVGrid: all four tiles are in
+            // the view hierarchy from the start, so UI tests can find
+            // them without first scrolling the LazyVGrid into view
+            // (five straight CI failures proved neither app.swipeUp()
+            // nor scrollView.swipeUp() moves this page in the test
+            // environment). Only four items, so there is no
+            // performance cost; layout is identical to the lazy grid
+            // (two equal-width columns, 16pt spacing).
+            VStack(spacing: 16) {
+                HStack(spacing: 16) {
+                    vitalTile(id: primary[0])
+                    vitalTile(id: primary[1])
                 }
+                HStack(spacing: 16) {
+                    vitalTile(id: primary[2])
+                    vitalTile(id: primary[3])
+                }
+            }
+        }
+    }
+
+    private func vitalTile(id: String) -> some View {
+        Group {
+            if let metric = HealthCatalog.byID[id] {
+                NavigationLink {
+                    MetricDetailView(metric: metric)
+                } label: {
+                    MetricCard(metric: metric, reading: health.readings[id])
+                }
+                .buttonStyle(.plain)
+                // Stable identifier for UI tests: the card's
+                // accessibility label is not the metric name
+                // (V3Card exposes children separately), so the
+                // screenshot test finds the tile by this id.
+                .accessibilityIdentifier("metric-tile-\(id)")
+                // Explicit button label, so the tile is also
+                // findable by its metric name ("静息心率").
+                .accessibilityLabel(metric.name)
+                .frame(maxWidth: .infinity)
             }
         }
     }
