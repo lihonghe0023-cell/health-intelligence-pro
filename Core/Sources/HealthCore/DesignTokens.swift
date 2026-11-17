@@ -85,11 +85,14 @@ public enum HealthDesignTokens {
     /// use the darkened variant. `textDark` equals `base`: every base hex
     /// passes 4.5:1 as text on the dark card (#101F33: brand 4.99, sleep
     /// 5.29, recovery 9.08, stress 9.73, energy 9.44, load 4.87, risk 5.83).
-    /// textLight variants were verified by computation against white,
-    /// #F6F9FF and #EDF3FB (all >= 4.5:1): brand #1B5FC7 (5.99/5.68/5.36),
-    /// sleep #6A4FD0 (5.77/5.47/5.17), recovery #0B7A55 (5.34/5.07/4.79),
-    /// stress #0A6E85 (5.86/5.56/5.25), energy #8A5A00 (5.93/5.62/5.31),
-    /// load #6E33D6 (6.76/6.41/6.05), risk #C22E42 (5.58/5.29/5.00).
+    /// textLight values are GPT's design-spec correction (Issue #2,
+    /// comment 6935424900, 2026-11-17): the original bright bases fail as
+    /// small light-mode text (1.71-3.40:1). GPT's text colors, verified
+    /// by computation against white, #F6F9FF and #EDF3FB (all >= 4.5:1):
+    /// brand #1763B1 (6.08/5.76/5.44), sleep #6043B8 (7.02/6.65/6.29),
+    /// recovery #087B58 (5.27/5.00/4.72), stress #006B85 (6.10/5.79/5.47),
+    /// energy #8A5200 (6.39/6.06/5.72), load #713DB3 (6.95/6.59/6.23),
+    /// risk #B32340 (6.50/6.16/5.82).
     public struct V3Semantic: Equatable, Sendable {
         public let base: RGB
         public let textLight: RGB
@@ -100,11 +103,11 @@ public enum HealthDesignTokens {
         }
     }
 
-    public static let v3Brand = V3Semantic(base: 0x398BFF, textLight: 0x1B5FC7)
-    public static let v3Sleep = V3Semantic(base: 0x9A7CFF, textLight: 0x6A4FD0)
-    public static let v3Recovery = V3Semantic(base: 0x20D9A0, textLight: 0x0B7A55)
-    public static let v3Stress = V3Semantic(base: 0x39D8F5, textLight: 0x0A6E85)
-    public static let v3Energy = V3Semantic(base: 0xFFB547, textLight: 0x8A5A00)
-    public static let v3Load = V3Semantic(base: 0xA46CFF, textLight: 0x6E33D6)
-    public static let v3Risk = V3Semantic(base: 0xFF6578, textLight: 0xC22E42)
+    public static let v3Brand = V3Semantic(base: 0x398BFF, textLight: 0x1763B1)
+    public static let v3Sleep = V3Semantic(base: 0x9A7CFF, textLight: 0x6043B8)
+    public static let v3Recovery = V3Semantic(base: 0x20D9A0, textLight: 0x087B58)
+    public static let v3Stress = V3Semantic(base: 0x39D8F5, textLight: 0x006B85)
+    public static let v3Energy = V3Semantic(base: 0xFFB547, textLight: 0x8A5200)
+    public static let v3Load = V3Semantic(base: 0xA46CFF, textLight: 0x713DB3)
+    public static let v3Risk = V3Semantic(base: 0xFF6578, textLight: 0xB32340)
 }
