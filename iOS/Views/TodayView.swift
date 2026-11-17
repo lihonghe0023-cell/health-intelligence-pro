@@ -244,6 +244,9 @@ struct TodayView: View {
                         // (V3Card exposes children separately), so the
                         // screenshot test finds the tile by this id.
                         .accessibilityIdentifier("metric-tile-\(id)")
+                        // Explicit button label, so the tile is also
+                        // findable by its metric name ("静息心率").
+                        .accessibilityLabel(metric.name)
                     }
                 }
             }
