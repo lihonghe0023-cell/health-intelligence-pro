@@ -6,6 +6,7 @@ import HealthCore
 /// nighttime heart rate / HRV (only when samples exist inside the sleep
 /// window). Six states, both themes. Real HealthKit data only — no
 /// fabricated values; missing data renders as "—" / "暂无记录".
+/// Submitted for independent QA in Draft PR #4; do not merge main directly.
 struct SleepView: View {
     @EnvironmentObject private var health: HealthViewModel
 
