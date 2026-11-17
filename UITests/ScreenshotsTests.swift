@@ -104,16 +104,27 @@ final class ScreenshotsTests: XCTestCase {
         // carries identifier "metric-tile-restingHeartRate" and an
         // explicit label "静息心率" (set in TodayView). The vitals
         // section sits below the Hero, connect card and five module
-        // cards, so allow up to 6 scroll attempts to reach it.
+        // cards, so allow up to 8 scroll attempts to reach it.
+        // NOTE (#59): app.swipeUp() never moved the page — no hierarchy
+        // snapshot in run #59 ever contained the vitals section
+        // ("核心生命体征"), so the LazyVGrid cells never materialized.
+        // Recreate the tile query on every iteration (a firstMatch
+        // element created once can go stale and never see the tile
+        // appear) and swipe the ScrollView itself, not the app.
         tapTab("今日")
-        let tile = app.buttons.matching(NSPredicate(
-            format: "label == %@ OR identifier == %@",
-            "静息心率", "metric-tile-restingHeartRate"
-        )).firstMatch
         var tileFound = false
-        for _ in 0..<6 {
-            if tile.waitForExistence(timeout: 3) { tileFound = true; break }
-            app.swipeUp()
+        var tile = app.buttons.firstMatch
+        for _ in 0..<8 {
+            let candidate = app.buttons.matching(NSPredicate(
+                format: "label == %@ OR identifier == %@",
+                "静息心率", "metric-tile-restingHeartRate"
+            )).firstMatch
+            if candidate.waitForExistence(timeout: 3) {
+                tile = candidate
+                tileFound = true
+                break
+            }
+            app.scrollViews.firstMatch.swipeUp()
         }
         XCTAssertTrue(tileFound, "resting heart rate tile missing")
         tile.tap()
