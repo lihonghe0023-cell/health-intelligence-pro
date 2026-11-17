@@ -105,13 +105,20 @@ final class ScreenshotsTests: XCTestCase {
         // explicit label "静息心率" (set in TodayView). The vitals
         // section sits below the Hero, connect card and five module
         // cards, so allow up to 8 scroll attempts to reach it.
-        // NOTE (#59): app.swipeUp() never moved the page — no hierarchy
-        // snapshot in run #59 ever contained the vitals section
+        // NOTE (#59/#60): neither app.swipeUp() nor
+        // scrollView.swipeUp() moved this page in the test environment
+        // — no hierarchy snapshot ever contained the vitals section
         // ("核心生命体征"), so the LazyVGrid cells never materialized.
+        // The vitals section is now an eager grid (TodayView), so the
+        // tile should be found without scrolling; keep a slow
+        // coordinate drag as the fallback scroll (a deliberate drag is
+        // more reliable than a quick swipe for a ScrollView).
         // Recreate the tile query on every iteration (a firstMatch
         // element created once can go stale and never see the tile
-        // appear) and swipe the ScrollView itself, not the app.
+        // appear).
         tapTab("今日")
+        let dragStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+        let dragEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
         var tileFound = false
         var tile = app.buttons.firstMatch
         for _ in 0..<8 {
@@ -124,7 +131,7 @@ final class ScreenshotsTests: XCTestCase {
                 tileFound = true
                 break
             }
-            app.scrollViews.firstMatch.swipeUp()
+            dragStart.press(forDuration: 0.3, thenDragTo: dragEnd)
         }
         XCTAssertTrue(tileFound, "resting heart rate tile missing")
         tile.tap()
