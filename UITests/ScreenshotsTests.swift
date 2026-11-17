@@ -96,8 +96,13 @@ final class ScreenshotsTests: XCTestCase {
         // and return. The tiles live in a LazyVGrid below the fold, so
         // scroll until the tile exists; no extra screenshot, the
         // assertions are the proof.
+        // NOTE (V3): the Hero quick-stats row also shows a "静息心率"
+        // label, but it is a static text, not a tile. Search buttons
+        // only, so the tap lands on a real NavigationLink tile (the
+        // recovery module card or the resting-heart-rate vital card)
+        // instead of the non-tappable Hero label.
         tapTab("今日")
-        let tile = app.descendants(matching: .any)
+        let tile = app.buttons
             .matching(NSPredicate(format: "label CONTAINS %@", "静息心率")).firstMatch
         var tileFound = false
         for _ in 0..<3 {
