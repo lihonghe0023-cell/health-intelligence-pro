@@ -120,10 +120,22 @@ final class ScreenshotsTests: XCTestCase {
     }
 
     private func tapTab(_ label: String) {
-        let tab = app.buttons[label]
-        XCTAssertTrue(tab.waitForExistence(timeout: 10), "tab \(label) missing")
-        tab.tap()
-        Thread.sleep(forTimeInterval: 1)
+        // In large-text mode a tap can miss the tab bar item and leave
+        // the previous tab selected (#62: 健康库 never switched, the
+        // page stayed on 心脏 while "健康数据库" timed out), so retry
+        // the tap until the tab reports selected. Tapping an
+        // already-selected tab is a no-op, so extra taps are harmless;
+        // the caller's content assertion still decides the outcome if
+        // the switch never lands.
+        for _ in 0..<3 {
+            let tab = app.buttons[label]
+            XCTAssertTrue(tab.waitForExistence(timeout: 10), "tab \(label) missing")
+            tab.tap()
+            Thread.sleep(forTimeInterval: 1)
+            if app.buttons[label].isSelected {
+                return
+            }
+        }
     }
 
     private func capture(_ page: String, prefix: String) {
