@@ -513,12 +513,12 @@ struct SleepStageTimeline: View {
                     // not awake. All runs share one absolute-time coordinate.
                     Capsule()
                         .fill(HealthTheme.v3Line.opacity(0.35))
-                    ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
-                        if let stage = run.stage {
+                    ForEach(Array(runs.enumerated()), id: \.offset) { item in
+                        if let stage = item.element.stage {
                             Rectangle()
                                 .fill(HealthTheme.stageColor(stage))
-                                .frame(width: CGFloat(run.width))
-                                .offset(x: CGFloat(run.x))
+                                .frame(width: CGFloat(item.element.width))
+                                .offset(x: CGFloat(item.element.x))
                         }
                     }
                 }
