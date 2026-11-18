@@ -89,15 +89,25 @@ final class StressCalculatorTests: XCTestCase {
     }
 
     func testSameElevationDuringActivityIsNotElevated() {
+        // Intent: the SAME heart-rate elevation that scores +1 at rest
+        // scores +0 during activity. Baselines are neutral here (HRV and
+        // resting heart rate equal their baselines) so the only possible
+        // driver is the activity-explained elevation itself.
+        // Previous inputs also had low HRV (-30%) and high resting heart
+        // rate (+9%), two baseline drivers worth +2 on their own; the test
+        // wrongly expected activity to cancel them. Fixed 2026-11-19 after
+        // CI #80 proved the implementation follows the documented rules.
         let hours = [
-            hour(0, hrv: 35, resting: 60, heartRate: 120, respiratory: 14, steps: 800, energy: 120),
-            hour(1, hrv: 36, resting: 60, heartRate: 118, respiratory: 15, steps: 900, energy: 130),
-            hour(2, hrv: 34, resting: 60, heartRate: 122, respiratory: 14, steps: 750, energy: 110)
+            hour(0, hrv: 50, resting: 55, heartRate: 120, respiratory: 14, steps: 800, energy: 120),
+            hour(1, hrv: 50, resting: 55, heartRate: 118, respiratory: 15, steps: 900, energy: 130),
+            hour(2, hrv: 50, resting: 55, heartRate: 122, respiratory: 14, steps: 750, energy: 110)
         ]
         let estimate = StressCalculator.estimate(hours: hours, hrvBaseline: 50, restingBaseline: 55)
         XCTAssertEqual(estimate.level, .moderate)
-        XCTAssertEqual(estimate.points, 1)
+        XCTAssertEqual(estimate.points, 0)
         XCTAssertTrue(estimate.drivers.contains { $0.contains("活动可解释") })
+        XCTAssertFalse(estimate.drivers.contains { $0.contains("HRV 低于个人基线") })
+        XCTAssertFalse(estimate.drivers.contains { $0.contains("静息心率高于个人基线") })
     }
 
     func testHighHRVIsLow() {
