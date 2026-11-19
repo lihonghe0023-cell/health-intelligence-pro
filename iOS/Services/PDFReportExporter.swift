@@ -34,10 +34,11 @@ enum PDFReportExporter {
             }
             draw("健康中枢 · 个人健康摘要", size: 22, bold: true)
             draw("生成于 \(ChineseDateTime.full(generatedAt)) · 来自本机 HealthKit 记录", size: 10)
-            if let earliest = readings.values.map(\.recordedAt).min() {
-                draw("统计窗口：\(ChineseDateTime.full(earliest)) – \(ChineseDateTime.full(generatedAt))", size: 10)
+            if let earliest = readings.values.map(\.recordedAt).min(),
+               let latest = readings.values.map(\.recordedAt).max() {
+                draw("指标记录时间范围：\(ChineseDateTime.full(earliest)) – \(ChineseDateTime.full(latest))", size: 10)
             } else {
-                draw("统计窗口：没有可用记录", size: 10)
+                draw("指标记录时间范围：没有可用记录", size: 10)
             }
             draw("仅供个人健康趋势整理，不用于医学诊断、急救决策或代替专业建议。", size: 10)
             cursor += 8
