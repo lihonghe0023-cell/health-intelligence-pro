@@ -80,10 +80,11 @@ final class HealthViewModel: ObservableObject {
         let nightIDs = ["heartRate", "hrv", "oxygenSaturation", "respiratoryRate", "sleepingWristTemperature", "appleSleepingBreathingDisturbances"]
         do {
             let intervals = try await repository.sleepIntervals()
-            sleep = intervals.isEmpty ? nil : SleepCalculator.summarize(intervals)
-            sleepWindow = SleepSession.window(from: intervals)
-            sleepIntervals = intervals
-            sleepReadState = intervals.isEmpty ? .empty : .loaded
+            let latestSessionIntervals = SleepSession.latestIntervals(from: intervals)
+            sleep = latestSessionIntervals.isEmpty ? nil : SleepCalculator.summarize(latestSessionIntervals)
+            sleepWindow = SleepSession.window(from: latestSessionIntervals)
+            sleepIntervals = latestSessionIntervals
+            sleepReadState = latestSessionIntervals.isEmpty ? .empty : .loaded
             do {
                 sleepSessions7d = try await repository.sleepSessions()
             } catch {

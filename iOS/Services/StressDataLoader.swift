@@ -67,8 +67,8 @@ final class StressDataLoader: ObservableObject {
                 restingHeartRate: restingHeartRate,
                 heartRateMedian: median(bucket["heartRate"] ?? []),
                 respiratoryRateMedian: median(bucket["respiratoryRate"] ?? []),
-                steps: (bucket["stepCount"] ?? []).reduce(0, +),
-                activeEnergyKcal: (bucket["activeEnergy"] ?? []).reduce(0, +)
+                steps: bucket["stepCount"].map { $0.reduce(0, +) },
+                activeEnergyKcal: bucket["activeEnergy"].map { $0.reduce(0, +) }
             )
         }
     }

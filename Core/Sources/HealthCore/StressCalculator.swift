@@ -25,12 +25,12 @@ public struct StressHourInput: Equatable, Sendable {
     public let restingHeartRate: Double?
     public let heartRateMedian: Double?
     public let respiratoryRateMedian: Double?
-    public let steps: Double
-    public let activeEnergyKcal: Double
+    public let steps: Double?
+    public let activeEnergyKcal: Double?
 
     public init(hourStart: Date, hrvMedian: Double? = nil, restingHeartRate: Double? = nil,
                 heartRateMedian: Double? = nil, respiratoryRateMedian: Double? = nil,
-                steps: Double = 0, activeEnergyKcal: Double = 0) {
+                steps: Double? = nil, activeEnergyKcal: Double? = nil) {
         self.hourStart = hourStart
         self.hrvMedian = hrvMedian
         self.restingHeartRate = restingHeartRate
@@ -46,7 +46,10 @@ public struct StressHourInput: Equatable, Sendable {
     }
 
     /// 静息时段：步数与活动能量都很低的小时。
+    public var hasActivityData: Bool { steps != nil && activeEnergyKcal != nil }
+
     public var isRestingHour: Bool {
+        guard let steps, let activeEnergyKcal else { return false }
         return steps < 100 && activeEnergyKcal < 20
     }
 }
@@ -150,7 +153,7 @@ public enum StressCalculator {
             if heartRate > reference + 15 {
                 if hour.isRestingHour {
                     restingElevatedHours += 1
-                } else {
+                } else if hour.hasActivityData {
                     activityExplainedHours += 1
                 }
             }

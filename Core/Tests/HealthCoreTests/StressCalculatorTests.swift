@@ -263,3 +263,14 @@ final class StressCalculatorTests: XCTestCase {
         XCTAssertFalse(elevated.drivers.isEmpty)
     }
 }
+
+
+extension StressCalculatorTests {
+    func testMissingActivityDoesNotBecomeRestingOrExplainedActivity() {
+        let missing = StressHourInput(hourStart: base, restingHeartRate: 60, heartRateMedian: 90)
+        XCTAssertFalse(missing.isRestingHour)
+        XCTAssertFalse(missing.hasActivityData)
+        let knownRest = hour(0, resting: 60, heartRate: 90, steps: 0, energy: 0)
+        XCTAssertTrue(knownRest.isRestingHour)
+    }
+}

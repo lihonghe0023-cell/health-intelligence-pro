@@ -75,7 +75,7 @@ struct SleepView: View {
 
     private var pageHeading: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("睡眠，是身体的修复时间")
+            Text("睡眠")
                 .font(HealthTheme.v3TitleFont)
                 .foregroundStyle(HealthTheme.v3Ink)
             Text("最近 36 小时的已有分期记录")
@@ -146,8 +146,8 @@ struct SleepView: View {
         }
         let hours = summary.totalAsleepMinutes / 60
         let minutes = summary.totalAsleepMinutes % 60
-        let start = window.lowerBound.formatted(.dateTime.month().day().hour().minute())
-        let end = window.upperBound.formatted(.dateTime.month().day().hour().minute())
+        let start = ChineseDateTime.full(window.lowerBound)
+        let end = ChineseDateTime.full(window.upperBound)
         return AnyView(
             V3Hero {
                 VStack(alignment: .leading, spacing: 12) {

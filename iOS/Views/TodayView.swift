@@ -74,8 +74,8 @@ struct TodayView: View {
                 Spacer()
                 V3Pill(title: "本机私密", icon: "lock.shield.fill")
             }
-            Text("读懂身体的每一天")
-                .font(HealthTheme.v3TitleFont)
+            Text("今日")
+                .font(.largeTitle.weight(.bold))
                 .foregroundStyle(HealthTheme.v3Ink)
                 .minimumScaleFactor(0.85)
             Text(ChineseDateTime.day(Date.now))
@@ -87,39 +87,32 @@ struct TodayView: View {
 
     private var hero: some View {
         V3Hero {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 8) {
-                    Text("健康概览")
-                        .font(.caption2.weight(.bold))
-                        .tracking(2)
-                        .foregroundStyle(HealthTheme.v3Muted)
-                    Spacer()
-                    V3Pill(title: "估算", icon: "info.circle.fill")
-                }
-                Text("今日综合状态")
-                    .font(HealthTheme.v3HeadlineFont)
-                    .foregroundStyle(HealthTheme.v3Ink)
-                HStack(alignment: .center, spacing: 16) {
-                    StatusRing(
-                        progress: heroCoverage, color: HealthTheme.v3Brand,
-                        center: "\(modulesWithData)/5", caption: "模块", size: 104, lineWidth: 10
-                    )
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("已读取 \(health.readings.count) 项指标")
-                            .font(.headline)
-                            .foregroundStyle(HealthTheme.v3Ink)
-                        Text("\(modulesWithData)/5 个模块有数据")
-                            .font(.subheadline)
-                            .foregroundStyle(HealthTheme.v3Muted)
-                        Text(health.lastRefreshedAt.map { "数据更新于 \(ChineseDateTime.full($0))" } ?? "尚未读取")
-                            .font(HealthTheme.v3AuxFont)
-                            .foregroundStyle(HealthTheme.v3Muted)
+            VStack(alignment: .leading, spacing: 12) {
+                Label("最近一晚", systemImage: "moon.stars.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(HealthTheme.v4Muted)
+                if let sleep = health.sleep, let window = health.sleepWindow {
+                    Text("\(sleep.totalAsleepMinutes / 60) 小时 \(sleep.totalAsleepMinutes % 60) 分")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(HealthTheme.v4Ink)
+                        .minimumScaleFactor(0.75)
+                    Text("本次睡眠 \(ChineseDateTime.full(window.lowerBound)) – \(ChineseDateTime.full(window.upperBound))")
+                        .font(.subheadline)
+                        .foregroundStyle(HealthTheme.v4Muted)
+                    Button(action: onOpenSleepTab) {
+                        Label("查看睡眠分期", systemImage: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(minHeight: 44)
                     }
+                    .foregroundStyle(HealthTheme.v4Accent)
+                } else {
+                    Text("暂无可读取睡眠记录")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(HealthTheme.v4Ink)
+                    Text("读取后显示最近一晚的时间与分期。")
+                        .font(.subheadline)
+                        .foregroundStyle(HealthTheme.v4Muted)
                 }
-                quickStats
-                Text("综合状态为估算，基于已读取的数据，不是医疗诊断。")
-                    .font(HealthTheme.v3AuxFont)
-                    .foregroundStyle(HealthTheme.v3Muted)
             }
         }
     }
@@ -189,8 +182,8 @@ struct TodayView: View {
             if isStale {
                 V3StaleBanner(lastUpdated: health.lastRefreshedAt ?? .now)
             }
-            modulesSection
             vitalsSection
+            modulesSection
             insightsSection
         }
     }
@@ -218,7 +211,7 @@ struct TodayView: View {
 
     private var modulesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            V3SectionHeadline(title: "今日模块", subtitle: "点按查看详情；圆环为数据覆盖，不是健康评分")
+            V3SectionHeadline(title: "恢复与活动", subtitle: "查看记录与估算依据")
             ForEach(modules) { module in
                 if module.id == .sleep {
                     Button(action: onOpenSleepTab) {

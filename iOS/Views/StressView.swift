@@ -307,7 +307,7 @@ struct StressView: View {
     private func trendCell(hourStart: Date) -> some View {
         let level = hourlyLevelByHour[hourStart]
         let input = hourInputByHour[hourStart]
-        let isActivityHour = input.map { $0.isRestingHour == false } ?? false
+        let isActivityHour = input.map { $0.hasActivityData && $0.isRestingHour == false } ?? false
         return VStack(spacing: 2) {
             Text(hourFormatter.string(from: hourStart) + "时")
                 .font(.caption2)
