@@ -108,10 +108,10 @@ struct StressView: View {
 
     private var dataSourceText: String {
         if let loaded = loader.loadedAt {
-            return "数据来源：Apple 健康 · 更新于 \(loaded.formatted(date: .omitted, time: .shortened))"
+            return "数据来源：Apple 健康 · 更新于 \(ChineseDateTime.full(loaded))"
         }
         if let last = health.lastRefreshedAt {
-            return "数据来源：Apple 健康 · 更新于 \(last.formatted(date: .omitted, time: .shortened))"
+            return "数据来源：Apple 健康 · 更新于 \(ChineseDateTime.full(last))"
         }
         return "数据来源：Apple 健康"
     }
@@ -222,46 +222,65 @@ struct StressView: View {
 
     private var hero: some View {
         V3Hero {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    V3Pill(title: "生理负荷信号估算", icon: "wind", tint: HealthTheme.v3StressText)
-                    Spacer()
-                    Text("真实记录")
-                        .font(HealthTheme.v3AuxFont)
-                        .foregroundStyle(HealthTheme.v3Muted)
-                }
-                HStack(alignment: .center, spacing: 16) {
-                    StatusRing(
-                        progress: coverageProgress, color: HealthTheme.v3Stress,
-                        center: "\(estimate.coveredInputs)/\(estimate.totalInputs)", caption: "项输入", size: 104, lineWidth: 10
-                    )
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("当日生理负荷信号")
-                            .font(HealthTheme.v3SectionFont)
-                            .foregroundStyle(HealthTheme.v3Ink)
-                        Text(estimate.level.rawValue)
-                            .font(HealthTheme.v3HeadlineFont)
-                            .foregroundStyle(levelColor(estimate.level))
-                            .minimumScaleFactor(0.7)
-                            .lineLimit(2)
-                        Text("置信度：\(estimate.confidence.rawValue)")
-                            .font(.subheadline)
-                            .foregroundStyle(HealthTheme.v3Muted)
+            VStack(alignment: .leading, spacing: 14) {
+                Label("今日生理负荷", systemImage: "waveform.path.ecg")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(HealthTheme.v3Muted)
+                Text(estimate.level == .insufficient ? "数据不足" : estimate.level.rawValue)
+                    .font(.largeTitle.weight(.bold))
+                    .foregroundStyle(levelColor(estimate.level))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Text("基于最近可用的 HRV、心率、呼吸和活动记录估算")
+                    .font(.subheadline)
+                    .foregroundStyle(HealthTheme.v3Muted)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        summaryMetric(id: "hrv", title: "今日 HRV", unit: "毫秒", baseline: hrvBaseline)
+                        summaryMetric(id: "restingHeartRate", title: "静息心率", unit: "次/分", baseline: restingBaseline)
+                    }
+                    VStack(spacing: 10) {
+                        summaryMetric(id: "hrv", title: "今日 HRV", unit: "毫秒", baseline: hrvBaseline)
+                        summaryMetric(id: "restingHeartRate", title: "静息心率", unit: "次/分", baseline: restingBaseline)
                     }
                 }
+                .padding(.vertical, 4)
+                Text("输入覆盖 \(estimate.coveredInputs)/\(estimate.totalInputs) · 置信度：\(estimate.confidence.rawValue)")
+                    .font(.footnote)
+                    .foregroundStyle(HealthTheme.v3Muted)
                 ForEach(estimate.drivers, id: \.self) { driver in
-                    Text("· \(driver)")
-                        .font(HealthTheme.v3BodyFont)
-                        .foregroundStyle(HealthTheme.v3Muted)
+                    Text(driver)
+                        .font(.subheadline)
+                        .foregroundStyle(HealthTheme.v3Ink)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(dataSourceText)
-                    .font(HealthTheme.v3AuxFont)
-                    .foregroundStyle(HealthTheme.v3Muted)
-                Text("圆环为数据覆盖（已读取的输入项），不是健康评分。")
-                    .font(HealthTheme.v3AuxFont)
+                    .font(.footnote)
                     .foregroundStyle(HealthTheme.v3Muted)
             }
         }
+    }
+
+    private func summaryMetric(id: String, title: String, unit: String, baseline: Double?) -> some View {
+        let reading = health.readings[id]
+        return VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(HealthTheme.v3Muted)
+            Text(reading.map { String(format: "%.0f %@", $0.value, unit) } ?? "—")
+                .font(.title3.weight(.bold).monospacedDigit())
+                .foregroundStyle(HealthTheme.v3Ink)
+            Text(baseline.map { String(format: "个人基线 %.0f %@", $0, unit) } ?? "个人基线数据不足")
+                .font(.caption)
+                .foregroundStyle(HealthTheme.v3Muted)
+            Text(reading.map { ChineseDateTime.full($0.recordedAt) } ?? "暂无记录")
+                .font(.caption2)
+                .foregroundStyle(HealthTheme.v3Muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(HealthTheme.v3SurfaceSecondary, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
     }
 
     private var coverageProgress: Double {
@@ -404,7 +423,7 @@ struct StressView: View {
                 Label("活动与静息的区分", systemImage: "figure.walk")
                     .font(HealthTheme.v3SectionFont)
                     .foregroundStyle(HealthTheme.v3Ink)
-                Text("静息时段指该小时步数少于 100 步且活动能量少于 20 千卡。静息时段心率高于静息心率 15 次/分以上时计入负荷信号；活动时段的心率升高由活动可解释，不计入负荷信号，并在趋势中标注“活动”。")
+                Text("只有该小时的步数和活动能量均有记录，才判断活动状态。静息时段指步数少于 100 步且活动能量少于 20 千卡。静息时段心率高于静息心率 15 次/分以上时计入负荷信号；活动时段的心率升高由活动可解释，不计入负荷信号，并在趋势中标注“活动”。")
                     .font(HealthTheme.v3BodyFont)
                     .foregroundStyle(HealthTheme.v3Muted)
             }
