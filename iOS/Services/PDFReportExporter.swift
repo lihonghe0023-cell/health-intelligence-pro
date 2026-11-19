@@ -33,9 +33,9 @@ enum PDFReportExporter {
                 cursor += requiredHeight + 10
             }
             draw("健康中枢 · 个人健康摘要", size: 22, bold: true)
-            draw("生成于 \(generatedAt.formatted(date: .complete, time: .shortened)) · 来自本机 HealthKit 记录", size: 10)
+            draw("生成于 \(ChineseDateTime.full(generatedAt)) · 来自本机 HealthKit 记录", size: 10)
             if let earliest = readings.values.map(\.recordedAt).min() {
-                draw("统计窗口：\(earliest.formatted(date: .abbreviated, time: .shortened)) – \(generatedAt.formatted(date: .abbreviated, time: .shortened))", size: 10)
+                draw("统计窗口：\(ChineseDateTime.full(earliest)) – \(ChineseDateTime.full(generatedAt))", size: 10)
             } else {
                 draw("统计窗口：没有可用记录", size: 10)
             }
@@ -45,7 +45,7 @@ enum PDFReportExporter {
             if readings.isEmpty { draw("暂无可读取数据。", size: 12) }
             for metric in HealthCatalog.all {
                 guard let value = readings[metric.id] else { continue }
-                draw("\(metric.name)：\(metric.display(value.value)) \(value.unit)  [\(value.recordedAt.formatted(date: .abbreviated, time: .shortened))]", size: 11)
+                draw("\(metric.name)：\(metric.display(value.value)) \(value.unit)  [\(ChineseDateTime.full(value.recordedAt))]", size: 11)
             }
             let missing = HealthCatalog.all.filter { readings[$0.id] == nil }
             if !missing.isEmpty {
