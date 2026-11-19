@@ -2,6 +2,24 @@ import Foundation
 import HealthKit
 import HealthCore
 
+struct WorkoutRecord: Identifiable {
+    let id: UUID
+    let start: Date
+    let end: Date
+    let activity: HKWorkoutActivityType
+    let source: String
+    var name: String {
+        switch activity {
+        case .walking: return "步行"
+        case .running: return "跑步"
+        case .cycling: return "骑行"
+        case .swimming: return "游泳"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: return "力量训练"
+        default: return "训练记录"
+        }
+    }
+}
+
 /// HealthKit reads are independent of WatchConnectivity.
 /// Important: read access denial cannot be reliably distinguished from empty data.
 final class HealthKitRepository {
@@ -13,6 +31,7 @@ final class HealthKitRepository {
         var read: Set<HKObjectType> = Set(HealthCatalog.all.map { $0.quantityType as HKObjectType })
         read.insert(HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!)
         read.insert(HKObjectType.electrocardiogramType())
+        read.insert(HKObjectType.workoutType())
         for identifier in [HKCategoryTypeIdentifier.highHeartRateEvent,
                            .lowHeartRateEvent, .irregularHeartRhythmEvent] {
             if let type = HKObjectType.categoryType(forIdentifier: identifier) { read.insert(type) }
@@ -127,6 +146,16 @@ final class HealthKitRepository {
             result.append(TrendPoint(recordedAt: sample.endDate, value: value))
         }
         return result.sorted { $0.recordedAt < $1.recordedAt }
+    }
+
+    func recentWorkouts(limit: Int = 20) async throws -> [WorkoutRecord] {
+        let samples = try await sampleQuery(type: HKObjectType.workoutType(), predicate: nil, limit: limit)
+        return samples.compactMap { sample in
+            guard let workout = sample as? HKWorkout else { return nil }
+            return WorkoutRecord(id: workout.uuid, start: workout.startDate, end: workout.endDate,
+                                 activity: workout.workoutActivityType,
+                                 source: workout.sourceRevision.source.name)
+        }
     }
 
     func sleepIntervals() async throws -> [SleepInterval] {

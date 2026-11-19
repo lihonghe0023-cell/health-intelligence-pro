@@ -23,6 +23,13 @@ struct RecordsView: View {
                         Label("添加症状、用药或健康笔记", systemImage: "square.and.pencil")
                     }
                 }
+                Section("专题") {
+                    NavigationLink {
+                        ActivityView()
+                    } label: {
+                        Label("运动与训练记录", systemImage: "figure.run")
+                    }
+                }
                 ForEach(MetricGroup.allCases) { group in
                     if !visibleMetrics(in: group).isEmpty {
                     Section(group.rawValue) {
@@ -34,7 +41,7 @@ struct RecordsView: View {
                                         .foregroundStyle(HealthTheme.jade)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(metric.name)
-                                        Text(health.readings[metric.id].map { "上次记录 · \($0.recordedAt.formatted(date: .abbreviated, time: .shortened))" }
+                                        Text(health.readings[metric.id].map { "上次记录 · \(ChineseDateTime.full($0.recordedAt))" }
                                              ?? "暂无可读取记录")
                                             .font(.caption).foregroundStyle(HealthTheme.muted)
                                     }

@@ -21,11 +21,11 @@ enum HealthTheme {
     static let amber = color(HealthDesignTokens.amber)
     static let mint = teal
     static let sky = color(HealthDesignTokens.sky)
-    static let ink = color(HealthDesignTokens.ink)
-    static let muted = color(HealthDesignTokens.muted)
-    static let canvas = color(HealthDesignTokens.canvas)
-    static let surface = color(HealthDesignTokens.surface)
-    static let line = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.12) : UIColor(red: 0.839, green: 0.886, blue: 0.882, alpha: 1) })
+    static let ink = color(HealthDesignTokens.v4Ink)
+    static let muted = color(HealthDesignTokens.v4Muted)
+    static let canvas = color(HealthDesignTokens.v4Canvas)
+    static let surface = color(HealthDesignTokens.v4Card)
+    static let line = color(HealthDesignTokens.v4Line)
 
     /// Hero cards are intentionally dark in both schemes.
     static let heroTop = Color(red: 0.035, green: 0.28, blue: 0.32)

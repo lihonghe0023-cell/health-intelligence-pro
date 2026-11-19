@@ -23,14 +23,14 @@ struct ReportView: View {
                         }
                     }
                     SectionHeadline(title: "本次健康观察", subtitle: "使用已读取数据的可解释规则")
-                    if health.insights.isEmpty {
+                    if health.insights.allSatisfy({ $0.supportingMetricIDs.isEmpty }) {
                         HealthCard {
                             EmptyHealthState(title: "暂无可生成的观察",
                                              detail: "读取到足够的健康记录后，报告会列出观察内容与依据。",
                                              symbol: "doc.text")
                         }
                     }
-                    ForEach(health.insights) { insight in
+                    ForEach(health.insights.filter { !$0.supportingMetricIDs.isEmpty }) { insight in
                         HealthCard {
                             VStack(alignment: .leading, spacing: 9) {
                                 HStack(spacing: 9) {
