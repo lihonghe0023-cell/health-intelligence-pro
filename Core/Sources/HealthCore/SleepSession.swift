@@ -19,18 +19,19 @@ public enum SleepSession {
 
     public static func window(from intervals: [SleepInterval], maxGap: TimeInterval = 2 * 3600) -> ClosedRange<Date>? {
         let sorted = intervals.filter { $0.end > $0.start }.sorted { $0.start < $1.start }
-        guard let last = sorted.last else { return nil }
-        var runStart = last.start
-        var index = sorted.count - 1
-        while index > 0 {
-            let previous = sorted[index - 1]
-            if runStart.timeIntervalSince(previous.end) < maxGap {
-                runStart = min(runStart, previous.start)
-                index -= 1
+        guard let first = sorted.first else { return nil }
+        var runStart = first.start
+        var runEnd = first.end
+        // Sweep forward and track the furthest end of overlapping sources.
+        // The last interval by start time is not necessarily the last to end.
+        for interval in sorted.dropFirst() {
+            if interval.start.timeIntervalSince(runEnd) < maxGap {
+                runEnd = max(runEnd, interval.end)
             } else {
-                break
+                runStart = interval.start
+                runEnd = interval.end
             }
         }
-        return runStart...last.end
+        return runStart...runEnd
     }
 }
