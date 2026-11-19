@@ -16,10 +16,10 @@ def target_block(name: str) -> str:
     return tail[:next_target.start()] if next_target else tail
 
 def value(block: str, key: str) -> str:
-    match = re.search(rf"(?m)^\s+{re.escape(key)}:\s*['\\"]?([^'\\"\n#]+)", block)
+    match = re.search(rf"(?m)^\s+{re.escape(key)}:\s*([^\n#]+)", block)
     if not match:
         raise ValueError(f"Missing {key}")
-    return match.group(1).strip()
+    return match.group(1).strip().strip("\u0027\u0022")
 
 iphone = target_block("HealthIntelligence")
 watch = target_block("HealthWatch")
