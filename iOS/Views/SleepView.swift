@@ -146,6 +146,7 @@ struct SleepView: View {
         }
         let hours = summary.totalAsleepMinutes / 60
         let minutes = summary.totalAsleepMinutes % 60
+        let sessionMinutes = window.upperBound.timeIntervalSince(window.lowerBound) / 60
         let start = ChineseDateTime.full(window.lowerBound)
         let end = ChineseDateTime.full(window.upperBound)
         return AnyView(
@@ -172,6 +173,11 @@ struct SleepView: View {
                     Text("本次睡眠 \(start) – \(end)")
                         .font(HealthTheme.v3BodyFont)
                         .foregroundStyle(HealthTheme.v3Muted)
+                    if sessionMinutes > 0 {
+                        Text("睡眠效率约 \(Int((Double(summary.totalAsleepMinutes) / sessionMinutes * 100).rounded()))% · 睡眠时长 ÷ 会话时长")
+                            .font(.subheadline)
+                            .foregroundStyle(HealthTheme.v3Muted)
+                    }
                     Text("其中清醒 \(summary.minutesAwake) 分钟。睡眠分期不用于诊断睡眠疾病。")
                         .font(HealthTheme.v3AuxFont)
                         .foregroundStyle(HealthTheme.v3Muted)
