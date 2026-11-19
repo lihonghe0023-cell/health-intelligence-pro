@@ -265,7 +265,7 @@ struct HealthSourceBadge: View {
         }
         .font(.caption2.weight(.medium))
         .foregroundStyle(HealthTheme.muted)
-        .accessibilityLabel("数据来自\(source)，记录于\(date.formatted())")
+        .accessibilityLabel("数据来自\(source)，记录于\(ChineseDateTime.full(date))")
     }
 }
 
