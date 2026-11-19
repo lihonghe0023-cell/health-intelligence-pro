@@ -113,7 +113,7 @@ struct MetricTile: View {
                 // Time and source are always two lines, so a tile with no
                 // reading is exactly as tall as one with a reading.
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(reading.map { $0.recordedAt.formatted(date: .abbreviated, time: .shortened) } ?? emptyText)
+                    Text(reading.map { ChineseDateTime.full($0.recordedAt) } ?? emptyText)
                         .font(.caption2).foregroundStyle(HealthTheme.muted).lineLimit(1).minimumScaleFactor(0.8)
                     Text(reading.map { $0.source.isEmpty ? "来源未知" : $0.source } ?? "来源 —")
                         .font(.caption2).foregroundStyle(HealthTheme.muted).lineLimit(1).minimumScaleFactor(0.8)
