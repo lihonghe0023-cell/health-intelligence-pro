@@ -8,15 +8,15 @@ project = Path(__file__).resolve().parents[1] / "project.yml"
 text = project.read_text(encoding="utf-8")
 
 def target_block(name: str) -> str:
-    match = re.search(rf"(?m)^  {re.escape(name)}:\\s*$", text)
+    match = re.search(rf"(?m)^  {re.escape(name)}:\s*$", text)
     if not match:
         raise ValueError(f"Missing target {name}")
     tail = text[match.end():]
-    next_target = re.search(r"(?m)^  [A-Za-z][A-Za-z0-9_]*:\\s*$", tail)
+    next_target = re.search(r"(?m)^  [A-Za-z][A-Za-z0-9_]*:\s*$", tail)
     return tail[:next_target.start()] if next_target else tail
 
 def value(block: str, key: str) -> str:
-    match = re.search(rf"(?m)^\\s+{re.escape(key)}:\\s*['\\\"]?([^'\\\"\\n#]+)", block)
+    match = re.search(rf"(?m)^\s+{re.escape(key)}:\s*['\\"]?([^'\\"\n#]+)", block)
     if not match:
         raise ValueError(f"Missing {key}")
     return match.group(1).strip()
