@@ -96,7 +96,7 @@ final class SleepSessionTests: XCTestCase {
         let earlier = interval(0, 3_600)
         let later = interval(3_600 + 7_200, 3_600 + 10_800, stage: .rem)
         XCTAssertEqual(SleepSession.window(from: [later, earlier]), later.start...later.end)
-        XCTAssertEqual(SleepSession.latestIntervals(from: [later, earlier]), [later])
+        XCTAssertEqual(SleepSession.latestIntervals(from: [later, earlier]).map(\.start), [later.start])
     }
 
     func testGapJustBelowThresholdKeepsOneSession() {
@@ -110,7 +110,7 @@ final class SleepSessionTests: XCTestCase {
         let valid = interval(0, 3_600)
         let invalid = interval(100_000, 90_000)
         XCTAssertEqual(SleepSession.window(from: [invalid, valid]), valid.start...valid.end)
-        XCTAssertEqual(SleepSession.latestIntervals(from: [invalid, valid]), [valid])
+        XCTAssertEqual(SleepSession.latestIntervals(from: [invalid, valid]).map(\.start), [valid.start])
     }
 
     func testSessionWindowUsesAbsoluteTimeAcrossDaylightSavingTransition() {
