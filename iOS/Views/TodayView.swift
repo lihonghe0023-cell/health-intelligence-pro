@@ -125,14 +125,27 @@ struct TodayView: View {
     }
 
     private var quickStats: some View {
-        HStack(spacing: 8) {
-            quickStat(label: "睡眠", value: sleepDurationText)
-            Divider().frame(height: 36)
-            quickStat(label: "静息心率", value: readingText("restingHeartRate"))
-            Divider().frame(height: 36)
-            quickStat(label: "HRV", value: readingText("hrv"))
+        // Vertical layout at accessibility sizes prevents the three values
+        // from shrinking into unreadable labels on smaller iPhones.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                quickStat(label: "睡眠", value: sleepDurationText)
+                Divider().frame(height: 36)
+                quickStat(label: "静息心率", value: readingText("restingHeartRate"))
+                Divider().frame(height: 36)
+                quickStat(label: "HRV", value: readingText("hrv"))
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 10) {
+                quickStat(label: "睡眠", value: sleepDurationText)
+                Divider()
+                quickStat(label: "静息心率", value: readingText("restingHeartRate"))
+                Divider()
+                quickStat(label: "HRV", value: readingText("hrv"))
+            }
         }
         .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(HealthTheme.v3SurfaceSecondary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
