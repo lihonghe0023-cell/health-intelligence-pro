@@ -46,6 +46,12 @@
 5. 更新渠道与签名 IPA 必须一一对应；模拟器成功不替代真机 PASS。
 
 ## 实施拆分与文件所有权
-- GPT 已在本 PR 提交 HealthUpdateManifest（纯解析/验证）及对应单元测试，尚未获得本 HEAD 的 Swift 类型检查/单元测试通过证据。GPT 后续独立实现 UpdateChecker（网络状态机）、UpdateView（SwiftUI）及测试；先核对最新集成 HEAD 及现有路径，再认领具体文件，避免与 PR #15–#18 同文件并行修改。
+- GPT 已在本 PR 提交 HealthUpdateManifest（纯解析/验证）及对应单元测试，本 PR 的 `e7cad5348b4421eb084d62495c22ca85dd1c97f0` 已有 GitHub Actions #44911828890 completed/success 记录；该结果只覆盖工作流实际执行的 CI 门禁，不证明 iPhone 真机授权、签名或 IPA 安装。GPT 后续独立实现 UpdateChecker（网络状态机）、UpdateView（SwiftUI）及测试；先核对最新集成 HEAD 及现有路径，再认领具体文件，避免与 PR #15–#18 同文件并行修改。
 - Muse：仅在 GPT 提供固定 SHA 后运行 Xcode/设备验证、签名、截图、安装、回传原始证据。
 - 本文档 PR 可单独审查，不应在 P0 真机门禁通过前被解释为「可用安装包」。
+
+## 2026-11-22 证据更新（GPT）
+- 本 PR 已核对的 HEAD：`e7cad5348b4421eb084d62495c22ca85dd1c97f0`；对应 [Source Verification #44911828890](https://github.com/zsh199410/health-intelligence-pro/actions/runs/44911828890) 为 `completed/success`。这是该提交的 CI 证据，不能代替真机测试。
+- 当前依然缺少该版本的签名 IPA、iPhone 安装启动、HealthKit 四路径授权/拒绝/重启/升级回归及 entitlement 脱敏核验。此前旧包通过不自动覆盖新包。
+- PR #15 基于 main，PR #18 基于 #15 的集成分支；集成时应按 base/head 依赖顺序复核，不得将各 Draft PR 当成相互独立的 main 补丁直接合并。
+- GPT 独占本 PR 三个文件；Muse 仅负责运行 Mac/Xcode、真机、截图与脱敏日志，不在此分支或这些路径并行修改。Apple Watch 仍 P5。
