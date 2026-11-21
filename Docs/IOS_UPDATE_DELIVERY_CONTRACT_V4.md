@@ -3,15 +3,15 @@
 ## 目标与边界
 - 允许持续迭代：版本检查、更新说明、明确的用户操作、跳转可信安装渠道。
 - **不实现** App 内静默 IPA 安装、绕过 iOS 签名校验、自动重签名、后台自我替换。
-- 当前 iPhone HealthKit P0 真机授权/签名/崩溃门禁优先；此文档不是已实现功能，也不表示签名 IPA 已就绪。
-- Apple Watch 仍为 P5。此 PR 只增加独立文档，不触碰 Muse 的 Mac/Xcode、证书、现有 Swift 文件或 main。
+- iPhone HealthKit 旧包崩溃已有 2026-11-17 用户真机修复确认（Issue #3）；新构建仍须独立验证签名/授权四路径。此文档不表示签名 IPA 已就绪。
+- Apple Watch 仍为 P5。此 PR 已包含独立的 HealthUpdateManifest Swift 解析/验证源码和单元测试，以及本设计文档；未接入 App 页面、网络更新检查或安装能力。不触碰 Muse 的 Mac/Xcode、证书、现有共享 SwiftUI 文件或 main。
 
 ## 推荐渠道
 1. **TestFlight（优先）**：App 内展示可用更新，用户确认后打开 TestFlight；实际安装和更新由 TestFlight 完成。
 2. **自签/Ad Hoc（备选）**：App 内打开受控 HTTPS 下载说明页；由用户使用与其证书/设备相容的受信任安装流程安装。网页提供 IPA 下载不等于 iOS 可以直接安装；不能把 Safari 打开 IPA 当成通用安装能力。
 3. 不能声称任意个人开发者证书都可用 OTA manifest 安装；安装渠道须依据 Apple 实际分发许可和 provisioning profile 核实。
 
-## 建议数据契约（仅规划）
+## 更新清单数据契约（解析器已提交，服务端发布未实现）
 服务端只发布经过验收的 JSON 清单，不直接提供签名材料：
 
 ```json
@@ -28,7 +28,7 @@
 }
 ```
 
-上面是 **示例结构**，版本号、日期和 URL 均非实际发布信息。生产端须用自己的 HTTPS 域名/可信 TestFlight 链接替换，不得发布示例 URL。只接受 HTTPS，校验允许的主机白名单；拒绝未知 schema、无效版本号、过旧清单、非预期渠道；不要使用用户输入的任意下载 URL。可选 manifest 签名校验，避免更新入口被劫持。清单只含发布元数据，不包含 HealthKit 记录、个人标识、证书或私钥。
+上面是 **示例结构**，版本号、日期和 URL 均非实际发布信息。生产端须用自己的 HTTPS 域名/可信 TestFlight 链接替换，不得发布示例 URL。只接受 HTTPS，校验允许的主机白名单；拒绝未知 schema、无效版本号、非预期渠道；清单时效与防回放校验尚未实现，必须在上线前补齐；不要使用用户输入的任意下载 URL。建议上线前实现独立的 manifest 签名及防回放校验；当前仅有 HTTPS URL 主机白名单验证，不应宣称已防止清单被篡改。清单只含发布元数据，不包含 HealthKit 记录、个人标识、证书或私钥。
 
 ## SwiftUI 交互契约
 - 设置 → 关于 → 检查更新；可选首页轻提示，不弹阻断式强制更新弹窗。
@@ -46,6 +46,6 @@
 5. 更新渠道与签名 IPA 必须一一对应；模拟器成功不替代真机 PASS。
 
 ## 实施拆分与文件所有权
-- GPT 独立后续 PR：UpdateManifest（纯解析/验证）、UpdateChecker（网络状态机）、UpdateView（SwiftUI）和单元测试；先核对最新集成 HEAD 及现有路径，再认领具体文件，避免与 PR #15–#18 同文件并行修改。
+- GPT 已在本 PR 提交 HealthUpdateManifest（纯解析/验证）及对应单元测试，尚未获得本 HEAD 的 Swift 类型检查/单元测试通过证据。GPT 后续独立实现 UpdateChecker（网络状态机）、UpdateView（SwiftUI）及测试；先核对最新集成 HEAD 及现有路径，再认领具体文件，避免与 PR #15–#18 同文件并行修改。
 - Muse：仅在 GPT 提供固定 SHA 后运行 Xcode/设备验证、签名、截图、安装、回传原始证据。
 - 本文档 PR 可单独审查，不应在 P0 真机门禁通过前被解释为「可用安装包」。
