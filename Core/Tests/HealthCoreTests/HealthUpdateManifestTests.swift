@@ -101,7 +101,7 @@ final class HealthUpdateManifestTests: XCTestCase {
 
     func testRejectsBlankOrControlCharacterReleaseNotes() throws {
         let baseline = try JSONSerialization.jsonObject(with: json()) as! [String: Any]
-        for notes in [["  \\n  "], ["Important\\u{0000}update"], ["Valid", "  "]] {
+        for notes in [["  \n  "], ["Important\u{0000}update"], ["Valid", "  "]] {
             var payload = baseline
             payload["releaseNotes"] = notes
             let data = try JSONSerialization.data(withJSONObject: payload)
