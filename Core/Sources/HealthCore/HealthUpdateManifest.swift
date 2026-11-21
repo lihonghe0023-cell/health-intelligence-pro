@@ -64,6 +64,19 @@ public struct HealthUpdateManifest: Decodable, Equatable, Sendable {
         return manifest
     }
 
+    /// Advisory only: the approved distribution channel performs installation.
+    public enum UpdateDecision: Equatable, Sendable {
+        case upToDate
+        case optionalUpdate
+        case unsupportedInstalledBuild
+    }
+
+    public func decision(forInstalledBuild installedBuild: Int) -> UpdateDecision {
+        guard installedBuild > 0 else { return .unsupportedInstalledBuild }
+        if installedBuild < minimumSupportedBuild { return .unsupportedInstalledBuild }
+        return build > installedBuild ? .optionalUpdate : .upToDate
+    }
+
     public func isNewer(thanInstalledBuild installedBuild: Int) -> Bool {
         build > installedBuild
     }
