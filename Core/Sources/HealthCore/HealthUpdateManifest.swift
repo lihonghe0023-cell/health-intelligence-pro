@@ -38,12 +38,16 @@ public struct HealthUpdateManifest: Decodable, Equatable, Sendable {
             throw ValidationError.invalidVersion
         }
         guard !releaseNotes.isEmpty, releaseNotes.count <= 20,
-              releaseNotes.allSatisfy({ !$0.isEmpty && $0.count <= 500 }) else {
+              releaseNotes.allSatisfy({ note in
+                  !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                  note.count <= 500 &&
+                  !note.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+              }) else {
             throw ValidationError.invalidReleaseNotes
         }
         guard installPageURL.scheme?.lowercased() == "https",
               installPageURL.user == nil, installPageURL.password == nil,
-              installPageURL.port == nil,
+              installPageURL.port == nil, installPageURL.fragment == nil,
               let host = installPageURL.host?.lowercased(),
               trustedHosts.contains(host) else {
             throw ValidationError.untrustedInstallURL
