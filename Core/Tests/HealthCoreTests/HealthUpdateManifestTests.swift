@@ -55,6 +55,16 @@ final class HealthUpdateManifestTests: XCTestCase {
             json(digest: "not-sha256"), trustedHosts: trustedHosts))
     }
 
+    func testDecisionDistinguishesOptionalAndUnsupportedBuilds() throws {
+        let manifest = try HealthUpdateManifest.decodeAndValidate(
+            json(), trustedHosts: trustedHosts)
+        XCTAssertEqual(manifest.decision(forInstalledBuild: 101), .upToDate)
+        XCTAssertEqual(manifest.decision(forInstalledBuild: 102), .upToDate)
+        XCTAssertEqual(manifest.decision(forInstalledBuild: 100), .optionalUpdate)
+        XCTAssertEqual(manifest.decision(forInstalledBuild: 99), .unsupportedInstalledBuild)
+        XCTAssertEqual(manifest.decision(forInstalledBuild: 0), .unsupportedInstalledBuild)
+    }
+
     func testAcceptsWellFormedDigest() throws {
         let manifest = try HealthUpdateManifest.decodeAndValidate(
             json(digest: String(repeating: "a", count: 64)),
