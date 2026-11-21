@@ -71,4 +71,32 @@ final class HealthUpdateManifestTests: XCTestCase {
             trustedHosts: trustedHosts)
         XCTAssertEqual(manifest.artifactSHA256?.count, 64)
     }
+    func testRejectsUntrustedPortsAndAlternateHosts() {
+        for url in [
+            "https://updates.example.org:8443/install",
+            "https://evil.test/install",
+            "https://updates.example.org@evil.test/install",
+            "ftp://updates.example.org/install"
+        ] {
+            XCTAssertThrowsError(try HealthUpdateManifest.decodeAndValidate(
+                json(url: url), trustedHosts: trustedHosts), "Unexpectedly accepted: \(url)")
+        }
+    }
+
+    func testRejectsMalformedVersionsAndEmptyReleaseNotes() throws {
+        let baseline = try JSONSerialization.jsonObject(with: json()) as! [String: Any]
+        for version in ["4.0", "4.0.1.2", "4..1", "-4.0.1", "４.0.1", "4.0.a"] {
+            var payload = baseline
+            payload["version"] = version
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            XCTAssertThrowsError(try HealthUpdateManifest.decodeAndValidate(
+                data, trustedHosts: trustedHosts), "Unexpectedly accepted: \(version)")
+        }
+        var payload = baseline
+        payload["releaseNotes"] = [String]()
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        XCTAssertThrowsError(try HealthUpdateManifest.decodeAndValidate(
+            data, trustedHosts: trustedHosts))
+    }
+
 }
