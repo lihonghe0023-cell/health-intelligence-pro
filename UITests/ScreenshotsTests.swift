@@ -134,28 +134,28 @@ final class ScreenshotsTests: XCTestCase {
             }
         }
     }
+
     private func openSettingsWithRetry() {
-                // #176 root cause: in large-text mode the simulator run stalled
-                // (final section took ~49s vs ~8s/page) and a geometrically exact
+        // #176 root cause: in large-text mode the simulator run stalled
+        // (final section took ~49s vs ~8s/page) and a geometrically exact
         // tap on the gear button (358.17, 84.0 — identical to the successful
-                // tap 90s earlier in the same run) never presented the sheet.
-                // The button, its identifier and the sheet are all fine, so retry
-                // the tap instead of failing on the first attempt. Re-tapping is
-                // safe: the gear sets a boolean that presents the sheet, so a
-                // second tap cannot dismiss it.
-                for _ in 0..<3 {
-                                let settingsButton = app.buttons["设置与隐私"]
-                                XCTAssertTrue(settingsButton.waitForExistence(timeout: 10), "settings button missing")
-                                settingsButton.tap()
-                                Thread.sleep(forTimeInterval: 2)
-                                if app.staticTexts["设置与隐私"].exists {
-                                                    return
-                                }
-                }
-                XCTAssertTrue(app.staticTexts["设置与隐私"].waitForExistence(timeout: 10), "settings sheet missing")
+        // tap 90s earlier in the same run) never presented the sheet.
+        // The button, its identifier and the sheet are all fine, so retry
+        // the tap instead of failing on the first attempt. Re-tapping is
+        // safe: the gear sets a boolean that presents the sheet, so a
+        // second tap cannot dismiss it.
+        for _ in 0..<3 {
+            let settingsButton = app.buttons["设置与隐私"]
+            XCTAssertTrue(settingsButton.waitForExistence(timeout: 10), "settings button missing")
+            settingsButton.tap()
+            Thread.sleep(forTimeInterval: 2)
+            if app.staticTexts["设置与隐私"].exists {
+                return
+            }
+        }
+        XCTAssertTrue(app.staticTexts["设置与隐私"].waitForExistence(timeout: 10), "settings sheet missing")
     }
 
-    
     private func capture(_ page: String, prefix: String) {
         Thread.sleep(forTimeInterval: 1)
         // Full device screen, not just the app window: the visual gate
