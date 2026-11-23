@@ -8,6 +8,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Apply cinematic UI patch
+        run: git apply --check ui-cinematic.patch && git apply ui-cinematic.patch
       - name: Inspect Xcode
         run: xcodebuild -version
       - name: Swift package unit tests
@@ -41,6 +43,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Apply cinematic UI patch
+        run: git apply --check ui-cinematic.patch && git apply ui-cinematic.patch
       - name: Inspect Xcode
         run: xcodebuild -version
       - name: Install XcodeGen
