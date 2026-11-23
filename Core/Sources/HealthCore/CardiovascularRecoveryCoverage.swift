@@ -17,7 +17,7 @@ public enum CardiovascularRecoveryCoverage {
         }
     }
 
-    /// A recorded, finite one-minute post-exercise heart-rate reduction.
+    /// A recorded, finite one-minute post-exercise heart-rate change (signed).
     /// Nil does not imply that authorization was denied or recovery is poor.
     public static func oneMinuteRecovery(in readings: [String: MetricReading]) -> MetricReading? {
         guard availableMetricIDs(in: readings).contains("heartRateRecoveryOneMinute") else {
