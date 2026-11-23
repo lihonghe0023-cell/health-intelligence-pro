@@ -63,7 +63,7 @@ struct CardiovascularRecoveryView: View {
                             Text("没有记录不等于恢复能力差；可能未测量、未授权或设备不支持。")
                                 .font(.subheadline).foregroundStyle(HealthTheme.muted)
                         }
-                        Text("此数值反映一次已记录的运动后心率下降，不等于 HRV 或 VO₂max，也不能独立判断心脏疾病。")
+                        Text("此数值反映一次已记录的运动后心率变化，不等于 HRV 或 VO₂max，也不能独立判断心脏疾病。")
                             .font(.footnote).foregroundStyle(HealthTheme.muted)
                     }
                 }
