@@ -1191,7 +1191,7 @@ index 5a316ae..da70b9a 100644
  }
 diff --git a/iOS/Views/TimelineView.swift b/iOS/Views/TimelineView.swift
 new file mode 100644
-index 0000000..8f7b3ae
+index 0000000..f58e266
 --- /dev/null
 +++ b/iOS/Views/TimelineView.swift
 @@ -0,0 +1,159 @@
@@ -1309,7 +1309,7 @@ index 0000000..8f7b3ae
 +}
 +
 +private struct TimelineRow: View {
-+    let event: TimelineView.Event
++    let event: HealthTimelineView.Event
 +    let isLast: Bool
 +
 +    var body: some View {
