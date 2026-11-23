@@ -34,6 +34,13 @@ final class CardiovascularRecoveryCoverageTests: XCTestCase {
         XCTAssertNil(CardiovascularRecoveryCoverage.oneMinuteRecovery(in: readings))
     }
 
+    func testNegativePostWorkoutChangeIsRetainedRatherThanHidden() {
+        // A signed reduction can be below zero if heart rate rises after the workout.
+        let sample = reading("heartRateRecoveryOneMinute", value: -5)
+        XCTAssertEqual(CardiovascularRecoveryCoverage.oneMinuteRecovery(
+            in: ["heartRateRecoveryOneMinute": sample]), sample)
+    }
+
     func testRecordedRecoveryPreservesSourceAndTime() {
         let sample = reading("heartRateRecoveryOneMinute", value: 18)
         let readings = ["heartRateRecoveryOneMinute": sample]
