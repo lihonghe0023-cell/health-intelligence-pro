@@ -1,0 +1,102 @@
+name: iPhone Visual Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/visual-smoke.yml'
+      - 'ui-cinematic.patch'
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply cinematic UI patch
+        run: git apply --check ui-cinematic.patch && git apply ui-cinematic.patch
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          bash Scripts/generate_xcode_project.sh
+
+      - name: Build simulator app
+        run: |
+          set -o pipefail
+          xcodebuild -project HealthIntelligence.xcodeproj -scheme HealthIntelligence \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
+            -derivedDataPath build-visual \
+            CODE_SIGNING_ALLOWED=NO build | tee visual-build.log
+
+      - name: Capture rendered screens
+        run: |
+          set -euo pipefail
+          mkdir -p screenshots
+
+          DEVICE_ID=$(xcrun simctl list devices available |
+            sed -n 's/.*iPhone 16 Pro (\([A-F0-9-]*\)).*/\1/p' | head -1)
+          test -n "$DEVICE_ID"
+          echo "device=$DEVICE_ID"
+
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+
+          APP="build-visual/Build/Products/Debug-iphonesimulator/HealthIntelligence.app"
+          BUNDLE="app.rose4354.lettuce4008"
+          test -d "$APP"
+
+          xcrun simctl uninstall "$DEVICE_ID" "$BUNDLE" || true
+          xcrun simctl install "$DEVICE_ID" "$APP"
+
+          # First launch: honest onboarding screen.
+          xcrun simctl launch --terminate-running-process "$DEVICE_ID" "$BUNDLE"
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot screenshots/light-welcome.png
+
+          # Skip onboarding for the dashboard without invoking HealthKit.
+          xcrun simctl terminate "$DEVICE_ID" "$BUNDLE" || true
+          xcrun simctl spawn "$DEVICE_ID" defaults write "$BUNDLE" onboardingComplete -bool true
+
+          xcrun simctl ui "$DEVICE_ID" appearance light
+          xcrun simctl launch --terminate-running-process "$DEVICE_ID" "$BUNDLE"
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot screenshots/light-today.png
+
+          xcrun simctl terminate "$DEVICE_ID" "$BUNDLE" || true
+          xcrun simctl ui "$DEVICE_ID" appearance dark
+          xcrun simctl launch --terminate-running-process "$DEVICE_ID" "$BUNDLE"
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot screenshots/dark-today.png
+
+          xcrun simctl terminate "$DEVICE_ID" "$BUNDLE" || true
+          xcrun simctl ui "$DEVICE_ID" appearance light
+          xcrun simctl ui "$DEVICE_ID" content_size accessibility-extra-large
+          xcrun simctl launch --terminate-running-process "$DEVICE_ID" "$BUNDLE"
+          sleep 10
+          xcrun simctl io "$DEVICE_ID" screenshot screenshots/large-text-today.png
+
+          python3 Scripts/png_check.py size screenshots/light-welcome.png 1206 2622
+          python3 Scripts/png_check.py size screenshots/light-today.png 1206 2622
+          python3 Scripts/png_check.py size screenshots/dark-today.png 1206 2622
+          python3 Scripts/png_check.py size screenshots/large-text-today.png 1206 2622
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-smoke-screenshots
+          path: screenshots
+          if-no-files-found: warn
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-smoke-log
+          path: visual-build.log
+          if-no-files-found: ignore
