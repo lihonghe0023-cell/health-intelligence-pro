@@ -39,7 +39,10 @@ jobs:
           if-no-files-found: ignore
 
   screenshots:
-    runs-on: macos-15-intel
+    # UI automation on the Intel runner repeatedly timed out while querying
+    # the app's accessibility tree. Use the native ARM simulator for capture;
+    # the separate device build remains pinned to the proven Intel toolchain.
+    runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +111,7 @@ jobs:
           echo "== simctl cross-check =="
           if [ -f screenshots/simctl-crosscheck.png ]; then
             python3 Scripts/png_check.py size screenshots/simctl-crosscheck.png 1206 2622 \
-              || { echo "FAIL: simctl cross-check is not the iPhone 16 Pro full screen (1206x2622); the simulator rendered at the wrong size, so the XCTest shots cannot be trusted as full-screen evidence"; exit 1; }
+              || { echo "FAIL: simtl cross-check is not the iPhone 16 Pro full screen (1206x2622); the simulator rendered at the wrong size, so the XCTest shots cannot be trusted as full-screen evidence"; exit 1; }
           else
             echo "WARNING: simctl cross-check missing (UI tests may have failed before boot)"
           fi
