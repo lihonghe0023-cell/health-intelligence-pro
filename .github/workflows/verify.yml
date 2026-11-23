@@ -55,7 +55,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test -project HealthIntelligence.xcodeproj -scheme HealthIntelligence \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
             -only-testing:HealthIntelligenceUITests \
             -resultBundlePath UITestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO | tee uitest.log
@@ -76,7 +76,7 @@ jobs:
         if: always()
         run: |
           # Ground truth for the device screen: simctl captures the real
-          # framebuffer (iPhone 17 Pro must be 1206x2622). If this and
+          # framebuffer (iPhone 16 Pro must be 1206x2622). If this and
           # the XCTest shots disagree, the test capture — not the app —
           # is framing wrong. Saved for the Verify step to compare.
           xcrun simctl io booted screenshot screenshots/simctl-crosscheck.png \
@@ -108,7 +108,7 @@ jobs:
           echo "== simctl cross-check =="
           if [ -f screenshots/simctl-crosscheck.png ]; then
             python3 Scripts/png_check.py size screenshots/simctl-crosscheck.png 1206 2622 \
-              || { echo "FAIL: simctl cross-check is not the iPhone 17 Pro full screen (1206x2622); the simulator rendered at the wrong size, so the XCTest shots cannot be trusted as full-screen evidence"; exit 1; }
+              || { echo "FAIL: simctl cross-check is not the iPhone 16 Pro full screen (1206x2622); the simulator rendered at the wrong size, so the XCTest shots cannot be trusted as full-screen evidence"; exit 1; }
           else
             echo "WARNING: simctl cross-check missing (UI tests may have failed before boot)"
           fi
