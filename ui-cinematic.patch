@@ -1,0 +1,1928 @@
+From 578a1472484254e7640c07a121aff525f27e47d8 Mon Sep 17 00:00:00 2001
+From: lihonghe0023-cell <lihonghe0023@gmail.com>
+Date: Tue, 24 Nov 2026 02:44:10 +0800
+Subject: [PATCH] feat(ui): cinematic health dashboard and local nutrition
+ timeline
+
+---
+ Core/Sources/HealthCore/DesignTokens.swift |  12 +-
+ Core/Sources/HealthCore/Models.swift       |   5 +
+ iOS/Services/NutritionStore.swift          | 160 ++++++++++
+ iOS/Views/ActivityView.swift               |  76 ++++-
+ iOS/Views/HeartView.swift                  | 121 +++++++-
+ iOS/Views/MoodCheckInView.swift            |   6 +-
+ iOS/Views/NutritionView.swift              | 342 +++++++++++++++++++++
+ iOS/Views/RecordsView.swift                |  13 +-
+ iOS/Views/ReportView.swift                 |   3 +-
+ iOS/Views/RootView.swift                   |   2 +
+ iOS/Views/SettingsView.swift               |   2 +-
+ iOS/Views/SleepView.swift                  | 110 +++++--
+ iOS/Views/StressView.swift                 |   3 +-
+ iOS/Views/Theme.swift                      | 102 +++++-
+ iOS/Views/TimelineView.swift               | 159 ++++++++++
+ iOS/Views/TodayView.swift                  | 140 ++++++++-
+ iOS/Views/V3Components.swift               | 263 ++++++++++++++--
+ iOS/Views/WelcomeHealthView.swift          |   2 +-
+ 18 files changed, 1427 insertions(+), 94 deletions(-)
+ create mode 100644 iOS/Services/NutritionStore.swift
+ create mode 100644 iOS/Views/NutritionView.swift
+ create mode 100644 iOS/Views/TimelineView.swift
+
+diff --git a/Core/Sources/HealthCore/DesignTokens.swift b/Core/Sources/HealthCore/DesignTokens.swift
+index 9f89215..16b141e 100644
+--- a/Core/Sources/HealthCore/DesignTokens.swift
++++ b/Core/Sources/HealthCore/DesignTokens.swift
+@@ -64,12 +64,12 @@ public enum HealthDesignTokens {
+     }
+ 
+     // MARK: - V4 iOS presentation palette
+-    public static let v4Canvas = Token(hexLight: 0xF6F5FB, hexDark: 0x151321)
+-    public static let v4Card = Token(hexLight: 0xFFFFFF, hexDark: 0x211D31)
+-    public static let v4Ink = Token(hexLight: 0x1B1830, hexDark: 0xFAF5FF)
+-    public static let v4Muted = Token(hexLight: 0x625B75, hexDark: 0xC2B8D2)
+-    public static let v4Line = Token(hexLight: 0xE6E0F1, hexDark: 0x3D3452)
+-    public static let v4Accent = Token(hexLight: 0x5038A4, hexDark: 0xCFBAFF)
++    public static let v4Canvas = Token(hexLight: 0xF4F7FB, hexDark: 0x060A12)
++    public static let v4Card = Token(hexLight: 0xFFFFFF, hexDark: 0x101827)
++    public static let v4Ink = Token(hexLight: 0x101828, hexDark: 0xF7FAFC)
++    public static let v4Muted = Token(hexLight: 0x607083, hexDark: 0x91A0B5)
++    public static let v4Line = Token(hexLight: 0xE1E8F0, hexDark: 0x22304A)
++    public static let v4Accent = Token(hexLight: 0x0B718A, hexDark: 0x67E8F9)
+ 
+     // MARK: - V3 dual-theme tokens (GitHub Issue #2, 2026-11-17)
+     //
+diff --git a/Core/Sources/HealthCore/Models.swift b/Core/Sources/HealthCore/Models.swift
+index f932622..4e1c91f 100644
+--- a/Core/Sources/HealthCore/Models.swift
++++ b/Core/Sources/HealthCore/Models.swift
+@@ -86,6 +86,11 @@ public struct JournalEntry: Codable, Identifiable, Sendable {
+         case symptom = "症状"
+         case medication = "用药"
+         case note = "健康笔记"
++        case hydration = "补水"
++        case caffeine = "咖啡因"
++        case sunlight = "阳光"
++        case training = "训练"
++        case meal = "餐食"
+     }
+ 
+     public init(id: UUID = UUID(), timestamp: Date = Date(), category: Category, title: String, detail: String) {
+diff --git a/iOS/Services/NutritionStore.swift b/iOS/Services/NutritionStore.swift
+new file mode 100644
+index 0000000..f848b9a
+--- /dev/null
++++ b/iOS/Services/NutritionStore.swift
+@@ -0,0 +1,160 @@
++import Foundation
++import Combine
++
++struct NutritionEntry: Codable, Identifiable, Sendable {
++    let id: UUID
++    let timestamp: Date
++    let title: String
++    let calories: Double
++    let protein: Double
++    let carbohydrates: Double
++    let fat: Double
++    let fiber: Double
++    let water: Double
++    let caffeine: Double
++
++    init(
++        id: UUID = UUID(),
++        timestamp: Date = Date(),
++        title: String,
++        calories: Double,
++        protein: Double,
++        carbohydrates: Double,
++        fat: Double,
++        fiber: Double,
++        water: Double,
++        caffeine: Double
++    ) {
++        self.id = id
++        self.timestamp = timestamp
++        self.title = title
++        self.calories = calories
++        self.protein = protein
++        self.carbohydrates = carbohydrates
++        self.fat = fat
++        self.fiber = fiber
++        self.water = water
++        self.caffeine = caffeine
++    }
++}
++
++struct DailyNutritionSummary {
++    let calories: Double
++    let protein: Double
++    let carbohydrates: Double
++    let fat: Double
++    let fiber: Double
++    let water: Double
++    let caffeine: Double
++
++    var macroCalories: Double {
++        (protein * 4) + (carbohydrates * 4) + (fat * 9)
++    }
++
++    var proteinShare: Double {
++        guard macroCalories > 0 else { return 0 }
++        return protein * 4 / macroCalories
++    }
++
++    var carbohydrateShare: Double {
++        guard macroCalories > 0 else { return 0 }
++        return carbohydrates * 4 / macroCalories
++    }
++
++    var fatShare: Double {
++        guard macroCalories > 0 else { return 0 }
++        return fat * 9 / macroCalories
++    }
++}
++
++@MainActor
++final class NutritionStore: ObservableObject {
++    @Published private(set) var entries: [NutritionEntry] = []
++    @Published var errorMessage: String?
++
++    private var fileURL: URL {
++        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
++            .appendingPathComponent("PrivateNutrition", isDirectory: true)
++            .appendingPathComponent("entries.json")
++    }
++
++    init() { load() }
++
++    func add(
++        title: String,
++        calories: Double,
++        protein: Double,
++        carbohydrates: Double,
++        fat: Double,
++        fiber: Double,
++        water: Double,
++        caffeine: Double
++    ) -> Bool {
++        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
++        guard !trimmed.isEmpty else { return false }
++        entries.insert(
++            NutritionEntry(
++                title: trimmed,
++                calories: max(calories, 0),
++                protein: max(protein, 0),
++                carbohydrates: max(carbohydrates, 0),
++                fat: max(fat, 0),
++                fiber: max(fiber, 0),
++                water: max(water, 0),
++                caffeine: max(caffeine, 0)
++            ),
++            at: 0
++        )
++        return persist()
++    }
++
++    func remove(at offsets: IndexSet) {
++        for index in offsets.sorted(by: >) { entries.remove(at: index) }
++        _ = persist()
++    }
++
++    func remove(id: UUID) {
++        entries.removeAll { $0.id == id }
++        _ = persist()
++    }
++
++    func todaySummary(calendar: Calendar = .current, now: Date = .now) -> DailyNutritionSummary {
++        let today = entries.filter { calendar.isDate($0.timestamp, inSameDayAs: now) }
++        return DailyNutritionSummary(
++            calories: today.reduce(0) { $0 + $1.calories },
++            protein: today.reduce(0) { $0 + $1.protein },
++            carbohydrates: today.reduce(0) { $0 + $1.carbohydrates },
++            fat: today.reduce(0) { $0 + $1.fat },
++            fiber: today.reduce(0) { $0 + $1.fiber },
++            water: today.reduce(0) { $0 + $1.water },
++            caffeine: today.reduce(0) { $0 + $1.caffeine }
++        )
++    }
++
++    private func load() {
++        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
++        do {
++            entries = try JSONDecoder().decode([NutritionEntry].self, from: Data(contentsOf: fileURL))
++        } catch {
++            errorMessage = "本地营养记录读取失败：\(error.localizedDescription)"
++        }
++    }
++
++    @discardableResult
++    private func persist() -> Bool {
++        do {
++            try FileManager.default.createDirectory(
++                at: fileURL.deletingLastPathComponent(),
++                withIntermediateDirectories: true
++            )
++            let encoder = JSONEncoder()
++            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
++            try encoder.encode(entries).write(to: fileURL, options: [.atomic, .completeFileProtection])
++            errorMessage = nil
++            return true
++        } catch {
++            errorMessage = "本地营养记录保存失败：\(error.localizedDescription)"
++            return false
++        }
++    }
++}
+diff --git a/iOS/Views/ActivityView.swift b/iOS/Views/ActivityView.swift
+index b6e8003..2a82666 100644
+--- a/iOS/Views/ActivityView.swift
++++ b/iOS/Views/ActivityView.swift
+@@ -11,12 +11,19 @@ struct ActivityView: View {
+     var body: some View {
+         ScrollView {
+             VStack(alignment: .leading, spacing: 18) {
+-                Text("运动与体能")
+-                    .font(.largeTitle.weight(.bold))
+-                    .foregroundStyle(HealthTheme.ink)
+-                Text("记录、来源和时间一起查看")
+-                    .font(.subheadline)
+-                    .foregroundStyle(HealthTheme.muted)
++                VStack(alignment: .leading, spacing: 7) {
++                    Text("MOVE & RECOVER")
++                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
++                        .tracking(2.2)
++                        .foregroundStyle(HealthTheme.v3RecoveryText)
++                    Text("运动与体能")
++                        .font(.system(size: 31, weight: .semibold, design: .rounded))
++                        .foregroundStyle(HealthTheme.v3Ink)
++                    Text("活动量、训练记录与恢复信号")
++                        .font(.system(size: 14, weight: .medium, design: .rounded))
++                        .foregroundStyle(HealthTheme.v3Muted)
++                }
++                activityHero
+                 if health.failedMetricIDs.contains(where: { metricIDs.contains($0) }) {
+                     V3ErrorBanner(failedCount: health.failedMetricIDs.filter { metricIDs.contains($0) }.count)
+                 }
+@@ -61,7 +68,7 @@ struct ActivityView: View {
+             }
+             .padding(18)
+         }
+-        .background(HealthTheme.canvas.ignoresSafeArea())
++        .background { HealthAmbientBackground() }
+         .navigationTitle("运动与体能")
+         .refreshable { await health.refresh(); await load() }
+         .task { await load() }
+@@ -76,4 +83,59 @@ struct ActivityView: View {
+             readError = true
+         }
+     }
++
++    private var activityHero: some View {
++        let steps = health.readings["stepCount"]
++        let active = health.readings["activeEnergy"]
++        let progress = min(max((steps?.value ?? 0) / 8000, 0), 1)
++        return V3Hero {
++            HStack(spacing: 18) {
++                VStack(alignment: .leading, spacing: 5) {
++                    Text("今日步数")
++                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
++                        .foregroundStyle(.white.opacity(0.44))
++                    HStack(alignment: .firstTextBaseline, spacing: 4) {
++                        Text(steps.map { $0.value.formatted(.number.precision(.fractionLength(0))) } ?? "—")
++                            .font(.system(size: 44, weight: .medium, design: .rounded))
++                            .monospacedDigit()
++                            .foregroundStyle(.white)
++                            .minimumScaleFactor(0.65)
++                            .lineLimit(1)
++                        Text("步")
++                            .font(.system(size: 11, weight: .medium, design: .rounded))
++                            .foregroundStyle(.white.opacity(0.40))
++                    }
++                    Text("活动能量 \(active.map { "\($0.value.formatted(.number.precision(.fractionLength(0)))) kcal" } ?? "—")")
++                        .font(.system(size: 11, weight: .medium, design: .rounded))
++                        .foregroundStyle(.white.opacity(0.46))
++                }
++                Spacer(minLength: 6)
++                ZStack {
++                    Circle()
++                        .stroke(.white.opacity(0.09), lineWidth: 9)
++                    Circle()
++                        .trim(from: 0, to: progress)
++                        .stroke(
++                            AngularGradient(
++                                colors: [HealthTheme.v3Recovery.opacity(0.25), HealthTheme.v3Recovery, HealthTheme.v3Stress],
++                                center: .center
++                            ),
++                            style: StrokeStyle(lineWidth: 9, lineCap: .round)
++                        )
++                        .rotationEffect(.degrees(-90))
++                        .shadow(color: HealthTheme.v3Recovery.opacity(progress > 0 ? 0.4 : 0), radius: 12)
++                    VStack(spacing: 0) {
++                        Text("\(Int((progress * 100).rounded()))%")
++                            .font(.system(size: 17, weight: .semibold, design: .rounded))
++                            .monospacedDigit()
++                            .foregroundStyle(.white)
++                        Text("8k 目标")
++                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
++                            .foregroundStyle(.white.opacity(0.42))
++                    }
++                }
++                .frame(width: 94, height: 94)
++            }
++        }
++    }
+ }
+diff --git a/iOS/Views/HeartView.swift b/iOS/Views/HeartView.swift
+index 2351249..d8888f1 100644
+--- a/iOS/Views/HeartView.swift
++++ b/iOS/Views/HeartView.swift
+@@ -16,6 +16,19 @@ struct HeartView: View {
+         NavigationStack {
+             ScrollView {
+                 VStack(alignment: .leading, spacing: 20) {
++                    VStack(alignment: .leading, spacing: 7) {
++                        Text("RECOVERY SIGNAL")
++                            .font(.system(size: 10.5, weight: .bold, design: .rounded))
++                            .tracking(2.2)
++                            .foregroundStyle(HealthTheme.v3RecoveryText)
++                        Text("心脏与恢复")
++                            .font(.system(size: 31, weight: .semibold, design: .rounded))
++                            .foregroundStyle(HealthTheme.v3Ink)
++                        Text("看到身体如何恢复，而不由单次数值推断疾病")
++                            .font(.system(size: 14, weight: .medium, design: .rounded))
++                            .foregroundStyle(HealthTheme.v3Muted)
++                    }
++                    recoveryHero
+                     HStack(spacing: 12) {
+                         Image(systemName: "heart.fill").font(.title)
+                             .foregroundStyle(HealthTheme.coral)
+@@ -103,11 +116,115 @@ struct HeartView: View {
+                         .font(.footnote).foregroundStyle(HealthTheme.muted)
+                 }.padding(18)
+             }
+-            .background(HealthTheme.canvas.ignoresSafeArea())
+-            .navigationTitle("心脏")
++            .scrollIndicators(.hidden)
++            .background { HealthAmbientBackground(prominent: true) }
++            .navigationBarTitleDisplayMode(.inline)
+             .refreshable { await health.refresh() }
+         }
+     }
++
++    private var recoveryCoverage: Double {
++        let present = ["hrv", "restingHeartRate"].filter { health.readings[$0] != nil }.count
++        return Double(present) / 2.0
++    }
++
++    private var recoveryHero: some View {
++        V3Hero {
++            HStack(spacing: 18) {
++                VStack(alignment: .leading, spacing: 5) {
++                    Text("恢复")
++                        .font(.system(size: 12, weight: .semibold, design: .rounded))
++                        .foregroundStyle(.white.opacity(0.50))
++                    Text(recoveryCoverage > 0 ? "\(Int((recoveryCoverage * 100).rounded()))%" : "—")
++                        .font(.system(size: 46, weight: .medium, design: .rounded))
++                        .monospacedDigit()
++                        .foregroundStyle(.white)
++                    Text("HRV + 静息心率数据覆盖")
++                        .font(.system(size: 11, weight: .medium, design: .rounded))
++                        .foregroundStyle(.white.opacity(0.44))
++                }
++                Spacer(minLength: 4)
++                RecoveryArcGauge(progress: recoveryCoverage)
++            }
++            .padding(.vertical, 6)
++            VStack(alignment: .leading, spacing: 10) {
++                Divider().overlay(.white.opacity(0.12))
++                HStack(spacing: 0) {
++                    recoveryMetric(
++                        label: "HRV",
++                        value: displayedValue("hrv"),
++                        unit: HealthCatalog.byID["hrv"]?.unitText ?? "ms"
++                    )
++                    Divider().frame(height: 34).overlay(.white.opacity(0.12))
++                    recoveryMetric(
++                        label: "静息心率",
++                        value: displayedValue("restingHeartRate"),
++                        unit: "bpm"
++                    )
++                }
++            }
++        }
++    }
++
++    private func displayedValue(_ id: String) -> String {
++        guard let metric = HealthCatalog.byID[id], let reading = health.readings[id] else { return "—" }
++        return metric.display(reading.value)
++    }
++
++    private func recoveryMetric(label: String, value: String, unit: String) -> some View {
++        VStack(alignment: .leading, spacing: 3) {
++            Text(label)
++                .font(.system(size: 10.5, weight: .medium, design: .rounded))
++                .foregroundStyle(.white.opacity(0.44))
++            HStack(alignment: .firstTextBaseline, spacing: 3) {
++                Text(value)
++                    .font(.system(size: 22, weight: .semibold, design: .rounded))
++                    .monospacedDigit()
++                    .foregroundStyle(.white)
++                    .lineLimit(1)
++                    .minimumScaleFactor(0.7)
++                Text(unit)
++                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
++                    .foregroundStyle(.white.opacity(0.40))
++            }
++        }
++        .frame(maxWidth: .infinity, alignment: .leading)
++    }
++}
++
++private struct RecoveryArcGauge: View {
++    let progress: Double
++    private var clamped: Double { min(max(progress, 0), 1) }
++
++    var body: some View {
++        ZStack {
++            Circle()
++                .trim(from: 0.08, to: 0.92)
++                .stroke(.white.opacity(0.09), style: StrokeStyle(lineWidth: 9, lineCap: .round))
++                .rotationEffect(.degrees(90))
++            Circle()
++                .trim(from: 0.08, to: 0.08 + (0.84 * clamped))
++                .stroke(
++                    AngularGradient(
++                        colors: [
++                            HealthTheme.v3Recovery.opacity(0.22),
++                            HealthTheme.v3Recovery,
++                            HealthTheme.v3Stress
++                        ],
++                        center: .center
++                    ),
++                    style: StrokeStyle(lineWidth: 9, lineCap: .round)
++                )
++                .rotationEffect(.degrees(90))
++                .shadow(color: HealthTheme.v3Recovery.opacity(clamped > 0 ? 0.40 : 0), radius: 10)
++            Image(systemName: "leaf.fill")
++                .font(.system(size: 20, weight: .semibold))
++                .foregroundStyle(HealthTheme.v3Recovery)
++        }
++        .frame(width: 98, height: 98)
++        .accessibilityElement(children: .ignore)
++        .accessibilityLabel("恢复数据覆盖 \(Int((clamped * 100).rounded()))%")
++    }
+ }
+ 
+ struct ECGDetailView: View {
+diff --git a/iOS/Views/MoodCheckInView.swift b/iOS/Views/MoodCheckInView.swift
+index 78a6300..90eac04 100644
+--- a/iOS/Views/MoodCheckInView.swift
++++ b/iOS/Views/MoodCheckInView.swift
+@@ -264,7 +264,7 @@ struct MoodCheckInView: View {
+                 }
+                 .padding(20)
+             }
+-            .background(HealthTheme.v4Canvas.ignoresSafeArea())
++            .background { HealthAmbientBackground(prominent: true) }
+             .navigationTitle(editing == nil ? "心情打卡" : "修改心情记录")
+             .navigationBarTitleDisplayMode(.inline)
+             .toolbar {
+@@ -290,7 +290,7 @@ struct MoodCheckInView: View {
+                 .disabled(feeling == nil || store.isSaving)
+                 .padding(.horizontal, 20)
+                 .padding(.vertical, 12)
+-                .background(HealthTheme.v4Canvas)
++                .background(.ultraThinMaterial)
+             }
+         }
+     }
+@@ -388,7 +388,7 @@ private struct MoodLocalHistoryView: View {
+                 }
+                 .padding(20)
+             }
+-            .background(HealthTheme.v4Canvas.ignoresSafeArea())
++            .background { HealthAmbientBackground() }
+             .navigationTitle("本机心情记录")
+             .navigationBarTitleDisplayMode(.inline)
+             .toolbar {
+diff --git a/iOS/Views/NutritionView.swift b/iOS/Views/NutritionView.swift
+new file mode 100644
+index 0000000..f22e167
+--- /dev/null
++++ b/iOS/Views/NutritionView.swift
+@@ -0,0 +1,342 @@
++import SwiftUI
++
++/// Original, local-first nutrition tracker. It deliberately does not claim a
++/// proprietary food-quality score or infer intake from body measurements.
++struct NutritionView: View {
++    @StateObject private var store = NutritionStore()
++    @State private var showingAdd = false
++
++    private var summary: DailyNutritionSummary { store.todaySummary() }
++    private var todayEntries: [NutritionEntry] {
++        store.entries.filter { Calendar.current.isDateInToday($0.timestamp) }
++    }
++
++    var body: some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 18) {
++                heading
++                summaryHero
++                macroBreakdown
++                meals
++                disclaimer
++            }
++            .padding(.horizontal, 20)
++            .padding(.bottom, 28)
++        }
++        .scrollIndicators(.hidden)
++        .background { HealthAmbientBackground(prominent: true) }
++        .navigationBarTitleDisplayMode(.inline)
++        .toolbar {
++            ToolbarItem(placement: .topBarTrailing) {
++                Button { showingAdd = true } label: {
++                    Image(systemName: "plus")
++                }
++                .accessibilityLabel("添加营养记录")
++            }
++        }
++        .sheet(isPresented: $showingAdd) {
++            NutritionEntrySheet(store: store)
++        }
++        .alert("本地营养记录", isPresented: Binding(
++            get: { store.errorMessage != nil },
++            set: { if !$0 { store.errorMessage = nil } }
++        )) {
++            Button("好的", role: .cancel) { store.errorMessage = nil }
++        } message: {
++            Text(store.errorMessage ?? "")
++        }
++    }
++
++    private var heading: some View {
++        VStack(alignment: .leading, spacing: 7) {
++            Text("NUTRITION")
++                .font(.system(size: 10.5, weight: .bold, design: .rounded))
++                .tracking(2.2)
++                .foregroundStyle(HealthTheme.v3EnergyText)
++            Text("营养与水分")
++                .font(.system(size: 31, weight: .semibold, design: .rounded))
++                .foregroundStyle(HealthTheme.v3Ink)
++            Text("手动记录，原始数据只保存在本机")
++                .font(.system(size: 14, weight: .medium, design: .rounded))
++                .foregroundStyle(HealthTheme.v3Muted)
++        }
++        .padding(.top, 10)
++    }
++
++    private var summaryHero: some View {
++        V3Hero {
++            HStack(alignment: .bottom) {
++                VStack(alignment: .leading, spacing: 5) {
++                    Text("今日摄入")
++                        .font(.system(size: 12, weight: .semibold, design: .rounded))
++                        .foregroundStyle(.white.opacity(0.48))
++                    HStack(alignment: .firstTextBaseline, spacing: 5) {
++                        Text(number(summary.calories))
++                            .font(.system(size: 48, weight: .medium, design: .rounded))
++                            .monospacedDigit()
++                            .foregroundStyle(.white)
++                            .minimumScaleFactor(0.65)
++                            .lineLimit(1)
++                        Text("kcal")
++                            .font(.system(size: 13, weight: .medium, design: .rounded))
++                            .foregroundStyle(.white.opacity(0.46))
++                    }
++                }
++                Spacer()
++                VStack(alignment: .trailing, spacing: 3) {
++                    Text("\(todayEntries.count) 条记录")
++                        .font(.system(size: 11, weight: .medium, design: .rounded))
++                    Text(ChineseDateTime.day(.now))
++                        .font(.system(size: 11, weight: .medium, design: .rounded))
++                }
++                .foregroundStyle(.white.opacity(0.42))
++            }
++            HStack(spacing: 18) {
++                compactValue("水分", value: "\(number(summary.water)) mL", color: HealthTheme.v3Stress)
++                compactValue("咖啡因", value: "\(number(summary.caffeine)) mg", color: HealthTheme.v3Energy)
++                compactValue("纤维", value: "\(summary.fiber.formatted(.number.precision(.fractionLength(0...1)))) g", color: HealthTheme.v3Recovery)
++            }
++            .padding(.top, 10)
++        }
++    }
++
++    private var macroBreakdown: some View {
++        VStack(alignment: .leading, spacing: 10) {
++            V3SectionHeadline(title: "宏量营养", subtitle: "根据你输入的克数计算，不生成营养评分")
++            VStack(spacing: 14) {
++                NutritionBar(
++                    title: "蛋白质", value: summary.protein, share: summary.proteinShare,
++                    color: HealthTheme.v3Recovery
++                )
++                NutritionBar(
++                    title: "碳水", value: summary.carbohydrates, share: summary.carbohydrateShare,
++                    color: HealthTheme.v3Energy
++                )
++                NutritionBar(
++                    title: "脂肪", value: summary.fat, share: summary.fatShare,
++                    color: HealthTheme.v3Load
++                )
++            }
++            .padding(18)
++            .background {
++                HealthGlassSurface(cornerRadius: 24)
++            }
++        }
++    }
++
++    private var meals: some View {
++        VStack(alignment: .leading, spacing: 10) {
++            HStack {
++                V3SectionHeadline(title: "今日记录", subtitle: "长按记录可删除")
++                Spacer()
++                Button("添加") { showingAdd = true }
++                    .font(.subheadline.weight(.semibold))
++                    .foregroundStyle(HealthTheme.v3BrandText)
++            }
++
++            if todayEntries.isEmpty {
++                V3Card {
++                    VStack(spacing: 10) {
++                        Image(systemName: "fork.knife.circle.fill")
++                            .font(.system(size: 34))
++                            .foregroundStyle(HealthTheme.v3Energy)
++                        Text("今天还没有营养记录")
++                            .font(.headline)
++                            .foregroundStyle(HealthTheme.v3Ink)
++                        Text("添加餐食后，这里会按时间展示真实输入。")
++                            .font(.subheadline)
++                            .foregroundStyle(HealthTheme.v3Muted)
++                    }
++                    .frame(maxWidth: .infinity)
++                    .padding(.vertical, 14)
++                }
++            } else {
++                ForEach(todayEntries) { entry in
++                    NutritionEntryCard(entry: entry)
++                        .contextMenu {
++                            Button("删除记录", role: .destructive) {
++                                store.remove(id: entry.id)
++                            }
++                        }
++                }
++            }
++        }
++    }
++
++    private var disclaimer: some View {
++        Text("营养记录由你手动填写，不替代食物数据库、医学营养评估或个体化处方。")
++            .font(.footnote)
++            .foregroundStyle(HealthTheme.v3Muted)
++    }
++
++    private func number(_ value: Double) -> String {
++        value.formatted(.number.precision(.fractionLength(0)))
++    }
++
++    private func compactValue(_ title: String, value: String, color: Color) -> some View {
++        VStack(alignment: .leading, spacing: 3) {
++            Text(title)
++                .font(.system(size: 9.5, weight: .medium, design: .rounded))
++                .foregroundStyle(.white.opacity(0.38))
++            Text(value)
++                .font(.system(size: 12, weight: .semibold, design: .rounded))
++                .monospacedDigit()
++                .foregroundStyle(color)
++                .lineLimit(1)
++                .minimumScaleFactor(0.72)
++        }
++        .frame(maxWidth: .infinity, alignment: .leading)
++    }
++}
++
++private struct NutritionBar: View {
++    let title: String
++    let value: Double
++    let share: Double
++    let color: Color
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 7) {
++            HStack(alignment: .firstTextBaseline) {
++                Text(title)
++                    .font(.system(size: 13, weight: .medium, design: .rounded))
++                    .foregroundStyle(HealthTheme.v3Muted)
++                Spacer()
++                Text("\(value.formatted(.number.precision(.fractionLength(0...1)))) g")
++                    .font(.system(size: 14, weight: .semibold, design: .rounded))
++                    .monospacedDigit()
++                    .foregroundStyle(HealthTheme.v3Ink)
++                Text("\(Int((share * 100).rounded()))%")
++                    .font(.system(size: 11, weight: .medium, design: .rounded))
++                    .monospacedDigit()
++                    .foregroundStyle(color)
++                    .frame(width: 38, alignment: .trailing)
++            }
++            GeometryReader { geometry in
++                ZStack(alignment: .leading) {
++                    Capsule().fill(HealthTheme.v3Line.opacity(0.44))
++                    Capsule()
++                        .fill(
++                            LinearGradient(
++                                colors: [color.opacity(0.45), color],
++                                startPoint: .leading,
++                                endPoint: .trailing
++                            )
++                        )
++                        .frame(width: geometry.size.width * min(max(share, 0), 1))
++                        .shadow(color: color.opacity(0.28), radius: 7)
++                }
++            }
++            .frame(height: 7)
++        }
++        .accessibilityElement(children: .combine)
++        .accessibilityLabel("\(title) \(value) 克，占宏量营养 \(Int((share * 100).rounded()))%")
++    }
++}
++
++private struct NutritionEntryCard: View {
++    let entry: NutritionEntry
++
++    var body: some View {
++        V3Card {
++            HStack(alignment: .top, spacing: 12) {
++                Image(systemName: "fork.knife")
++                    .font(.system(size: 16, weight: .semibold))
++                    .foregroundStyle(HealthTheme.v3EnergyText)
++                    .frame(width: 38, height: 38)
++                    .background(HealthTheme.v3Energy.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
++                VStack(alignment: .leading, spacing: 4) {
++                    Text(entry.title)
++                        .font(.headline)
++                        .foregroundStyle(HealthTheme.v3Ink)
++                    Text("\(entry.timestamp.formatted(date: .omitted, time: .shortened)) · \(entry.calories.formatted(.number.precision(.fractionLength(0)))) kcal")
++                        .font(.caption)
++                        .foregroundStyle(HealthTheme.v3Muted)
++                    Text("蛋白 \(entry.protein.formatted(.number.precision(.fractionLength(0...1))))g · 碳水 \(entry.carbohydrates.formatted(.number.precision(.fractionLength(0...1))))g · 脂肪 \(entry.fat.formatted(.number.precision(.fractionLength(0...1))))g")
++                        .font(.caption2)
++                        .foregroundStyle(HealthTheme.v3Muted)
++                }
++                Spacer(minLength: 0)
++            }
++        }
++        .accessibilityElement(children: .combine)
++    }
++}
++
++private struct NutritionEntrySheet: View {
++    @ObservedObject var store: NutritionStore
++    @Environment(\.dismiss) private var dismiss
++
++    @State private var title = ""
++    @State private var calories = ""
++    @State private var protein = ""
++    @State private var carbohydrates = ""
++    @State private var fat = ""
++    @State private var fiber = ""
++    @State private var water = ""
++    @State private var caffeine = ""
++
++    var body: some View {
++        NavigationStack {
++            Form {
++                Section("餐食") {
++                    TextField("名称，例如：鸡胸肉沙拉", text: $title)
++                }
++                Section("营养") {
++                    numberField("热量", unit: "kcal", text: $calories)
++                    numberField("蛋白质", unit: "g", text: $protein)
++                    numberField("碳水", unit: "g", text: $carbohydrates)
++                    numberField("脂肪", unit: "g", text: $fat)
++                    numberField("膳食纤维", unit: "g", text: $fiber)
++                    numberField("水分", unit: "mL", text: $water)
++                    numberField("咖啡因", unit: "mg", text: $caffeine)
++                }
++                Section {
++                    Text("只记录你实际知道的数值。留空按 0 计算，不连接未经授权的食物数据库。")
++                        .font(.footnote)
++                        .foregroundStyle(.secondary)
++                }
++            }
++            .navigationTitle("添加营养记录")
++            .navigationBarTitleDisplayMode(.inline)
++            .toolbar {
++                ToolbarItem(placement: .cancellationAction) {
++                    Button("取消") { dismiss() }
++                }
++                ToolbarItem(placement: .confirmationAction) {
++                    Button("保存") {
++                        let saved = store.add(
++                            title: title,
++                            calories: parsed(calories),
++                            protein: parsed(protein),
++                            carbohydrates: parsed(carbohydrates),
++                            fat: parsed(fat),
++                            fiber: parsed(fiber),
++                            water: parsed(water),
++                            caffeine: parsed(caffeine)
++                        )
++                        if saved { dismiss() }
++                    }
++                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
++                }
++            }
++        }
++    }
++
++    private func numberField(_ title: String, unit: String, text: Binding<String>) -> some View {
++        HStack {
++            Text(title)
++            Spacer()
++            TextField("0", text: text)
++                .keyboardType(.decimalPad)
++                .multilineTextAlignment(.trailing)
++                .frame(maxWidth: 110)
++            Text(unit)
++                .foregroundStyle(.secondary)
++        }
++    }
++
++    private func parsed(_ value: String) -> Double {
++        Double(value.replacingOccurrences(of: ",", with: ".")) ?? 0
++    }
++}
+diff --git a/iOS/Views/RecordsView.swift b/iOS/Views/RecordsView.swift
+index 6ff8284..0e68d04 100644
+--- a/iOS/Views/RecordsView.swift
++++ b/iOS/Views/RecordsView.swift
+@@ -24,6 +24,16 @@ struct RecordsView: View {
+                     }
+                 }
+                 Section("专题") {
++                    NavigationLink {
++                        TimelineView()
++                    } label: {
++                        Label("健康时间线", systemImage: "clock.arrow.circlepath")
++                    }
++                    NavigationLink {
++                        NutritionView()
++                    } label: {
++                        Label("营养与水分", systemImage: "fork.knife")
++                    }
+                     NavigationLink {
+                         ActivityView()
+                     } label: {
+@@ -71,7 +81,8 @@ struct RecordsView: View {
+                 }
+             }
+             .scrollContentBackground(.hidden)
+-            .background(HealthTheme.canvas.ignoresSafeArea())
++            .scrollIndicators(.hidden)
++            .background { HealthAmbientBackground() }
+             .navigationTitle("健康数据库")
+             .searchable(text: $searchText, prompt: "搜索心率、HRV、血糖等")
+             .refreshable { await health.refresh() }
+diff --git a/iOS/Views/ReportView.swift b/iOS/Views/ReportView.swift
+index aeb6077..8571113 100644
+--- a/iOS/Views/ReportView.swift
++++ b/iOS/Views/ReportView.swift
+@@ -89,7 +89,8 @@ struct ReportView: View {
+                     }
+                 }.padding(18)
+             }
+-            .background(HealthTheme.canvas.ignoresSafeArea())
++            .scrollIndicators(.hidden)
++            .background { HealthAmbientBackground() }
+             .navigationTitle("健康报告")
+             .alert("导出失败", isPresented: Binding(
+                 get: { exportError != nil },
+diff --git a/iOS/Views/RootView.swift b/iOS/Views/RootView.swift
+index 40cdd91..8b56531 100644
+--- a/iOS/Views/RootView.swift
++++ b/iOS/Views/RootView.swift
+@@ -33,6 +33,8 @@ struct RootView: View {
+             ReportView().tabItem { Label("报告", systemImage: "doc.text.image.fill") }.tag(4)
+         }
+         .tint(HealthTheme.v4Accent)
++        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
++        .toolbarBackground(.visible, for: .tabBar)
+         .preferredColorScheme(resolvedColorScheme)
+         .dynamicTypeSizeIfPresent(ThemeResolver.forcedDynamicTypeSize)
+         .animation(themeAnimation, value: resolvedColorScheme)
+diff --git a/iOS/Views/SettingsView.swift b/iOS/Views/SettingsView.swift
+index 320b2e3..a1c78c9 100644
+--- a/iOS/Views/SettingsView.swift
++++ b/iOS/Views/SettingsView.swift
+@@ -70,7 +70,7 @@ struct SettingsView: View {
+                 }
+             }
+             .scrollContentBackground(.hidden)
+-            .background(HealthTheme.canvas.ignoresSafeArea())
++            .background { HealthAmbientBackground() }
+             .navigationTitle("设置与隐私")
+             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+             .confirmationDialog("确定清空本机日志？", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+diff --git a/iOS/Views/SleepView.swift b/iOS/Views/SleepView.swift
+index 58b1451..7f5b58d 100644
+--- a/iOS/Views/SleepView.swift
++++ b/iOS/Views/SleepView.swift
+@@ -61,7 +61,8 @@ struct SleepView: View {
+                 .padding(.horizontal, HealthTheme.v3Margin)
+                 .padding(.bottom, 28)
+             }
+-            .background(HealthTheme.v3Canvas.ignoresSafeArea())
++            .scrollIndicators(.hidden)
++            .background { HealthAmbientBackground(prominent: true) }
+             .navigationBarTitleDisplayMode(.inline)
+             .toolbar {
+                 ToolbarItem(placement: .topBarTrailing) {
+@@ -74,12 +75,16 @@ struct SleepView: View {
+     }
+ 
+     private var pageHeading: some View {
+-        VStack(alignment: .leading, spacing: 4) {
+-            Text("睡眠")
+-                .font(HealthTheme.v3TitleFont)
++        VStack(alignment: .leading, spacing: 7) {
++            Text("SLEEP ARCHITECTURE")
++                .font(.system(size: 10.5, weight: .bold, design: .rounded))
++                .tracking(2.2)
++                .foregroundStyle(HealthTheme.v3SleepText)
++            Text("昨夜睡眠")
++                .font(.system(size: 31, weight: .semibold, design: .rounded))
+                 .foregroundStyle(HealthTheme.v3Ink)
+-            Text("最近 36 小时的已有分期记录")
+-                .font(HealthTheme.v3BodyFont)
++            Text("最近 36 小时 · 真实分期记录")
++                .font(.system(size: 14, weight: .medium, design: .rounded))
+                 .foregroundStyle(HealthTheme.v3Muted)
+         }
+         .padding(.horizontal, 2)
+@@ -151,7 +156,7 @@ struct SleepView: View {
+         let end = ChineseDateTime.full(window.upperBound)
+         return AnyView(
+             V3Hero {
+-                VStack(alignment: .leading, spacing: 12) {
++                VStack(alignment: .leading, spacing: 16) {
+                     HStack {
+                         V3Pill(title: "睡眠分期", icon: "moon.stars.fill", tint: HealthTheme.v3SleepText)
+                         Spacer()
+@@ -159,28 +164,47 @@ struct SleepView: View {
+                             .font(HealthTheme.v3AuxFont)
+                             .foregroundStyle(HealthTheme.v3Muted)
+                     }
+-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+-                        Text("总睡眠")
+-                            .font(HealthTheme.v3SectionFont)
+-                            .foregroundStyle(HealthTheme.v3Ink)
+-                        Spacer()
+-                        Text("\(hours) 小时 \(minutes) 分")
+-                            .font(HealthTheme.v3TitleFont)
+-                            .foregroundStyle(HealthTheme.v3Ink)
++                    HStack(spacing: 18) {
++                        VStack(alignment: .leading, spacing: 5) {
++                            Text("总睡眠")
++                                .font(.system(size: 12, weight: .medium, design: .rounded))
++                                .foregroundStyle(.white.opacity(0.52))
++                            HStack(alignment: .firstTextBaseline, spacing: 5) {
++                                Text("\(hours)")
++                                    .font(.system(size: 48, weight: .medium, design: .rounded))
++                                    .foregroundStyle(.white)
++                                Text("h")
++                                    .font(.system(size: 20, weight: .medium, design: .rounded))
++                                    .foregroundStyle(.white.opacity(0.56))
++                                Text("\(minutes)")
++                                    .font(.system(size: 48, weight: .medium, design: .rounded))
++                                    .foregroundStyle(.white)
++                                Text("m")
++                                    .font(.system(size: 20, weight: .medium, design: .rounded))
++                                    .foregroundStyle(.white.opacity(0.56))
++                            }
++                            .monospacedDigit()
+                             .minimumScaleFactor(0.7)
+                             .lineLimit(1)
++                        }
++                        Spacer(minLength: 8)
++                        SleepDurationRing(
++                            progress: sessionMinutes > 0
++                                ? min(Double(summary.totalAsleepMinutes) / sessionMinutes, 1)
++                                : 0,
++                            center: sessionMinutes > 0
++                                ? "\(Int((Double(summary.totalAsleepMinutes) / sessionMinutes * 100).rounded()))%"
++                                : "—"
++                        )
+                     }
+                     Text("本次睡眠 \(start) – \(end)")
+-                        .font(HealthTheme.v3BodyFont)
+-                        .foregroundStyle(HealthTheme.v3Muted)
++                        .font(.system(size: 13, weight: .medium, design: .rounded))
++                        .foregroundStyle(.white.opacity(0.50))
+                     if sessionMinutes > 0 {
+-                        Text("睡眠效率约 \(Int((Double(summary.totalAsleepMinutes) / sessionMinutes * 100).rounded()))% · 睡眠时长 ÷ 会话时长")
+-                            .font(.subheadline)
+-                            .foregroundStyle(HealthTheme.v3Muted)
++                        Text("睡眠效率 · 清醒 \(summary.minutesAwake) 分钟")
++                            .font(.system(size: 12, weight: .medium, design: .rounded))
++                            .foregroundStyle(.white.opacity(0.46))
+                     }
+-                    Text("其中清醒 \(summary.minutesAwake) 分钟。睡眠分期不用于诊断睡眠疾病。")
+-                        .font(HealthTheme.v3AuxFont)
+-                        .foregroundStyle(HealthTheme.v3Muted)
+                 }
+             }
+         )
+@@ -301,6 +325,46 @@ struct SleepView: View {
+     }
+ }
+ 
++private struct SleepDurationRing: View {
++    let progress: Double
++    let center: String
++    private var clamped: Double { min(max(progress, 0), 1) }
++
++    var body: some View {
++        ZStack {
++            Circle()
++                .stroke(.white.opacity(0.09), lineWidth: 8)
++            Circle()
++                .trim(from: 0, to: clamped)
++                .stroke(
++                    AngularGradient(
++                        colors: [
++                            HealthTheme.v3Sleep.opacity(0.30),
++                            HealthTheme.v3Sleep,
++                            HealthTheme.v3Stress.opacity(0.90)
++                        ],
++                        center: .center
++                    ),
++                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
++                )
++                .rotationEffect(.degrees(-90))
++                .shadow(color: HealthTheme.v3Sleep.opacity(clamped > 0 ? 0.48 : 0), radius: 12)
++            VStack(spacing: 1) {
++                Text(center)
++                    .font(.system(size: 18, weight: .semibold, design: .rounded))
++                    .monospacedDigit()
++                    .foregroundStyle(.white)
++                Text("睡眠效率")
++                    .font(.system(size: 8.5, weight: .medium, design: .rounded))
++                    .foregroundStyle(.white.opacity(0.46))
++            }
++        }
++        .frame(width: 92, height: 92)
++        .accessibilityElement(children: .combine)
++        .accessibilityLabel("睡眠效率 \(center)")
++    }
++}
++
+ private extension Array {
+     /// Split into consecutive chunks of `size` (last chunk may be smaller).
+     func chunked(into size: Int) -> [[Element]] {
+diff --git a/iOS/Views/StressView.swift b/iOS/Views/StressView.swift
+index d61c62a..100ee2a 100644
+--- a/iOS/Views/StressView.swift
++++ b/iOS/Views/StressView.swift
+@@ -139,7 +139,8 @@ struct StressView: View {
+                 .padding(.horizontal, HealthTheme.v3Margin)
+                 .padding(.bottom, 28)
+             }
+-            .background(HealthTheme.v3Canvas.ignoresSafeArea())
++            .scrollIndicators(.hidden)
++            .background { HealthAmbientBackground(prominent: true) }
+             .navigationBarTitleDisplayMode(.inline)
+             .toolbar {
+                 ToolbarItem(placement: .topBarTrailing) {
+diff --git a/iOS/Views/Theme.swift b/iOS/Views/Theme.swift
+index 5a316ae..da70b9a 100644
+--- a/iOS/Views/Theme.swift
++++ b/iOS/Views/Theme.swift
+@@ -27,14 +27,104 @@ enum HealthTheme {
+     static let surface = color(HealthDesignTokens.v4Card)
+     static let line = color(HealthDesignTokens.v4Line)
+ 
+-    /// Hero cards are intentionally dark in both schemes.
+-    static let heroTop = Color(red: 0.035, green: 0.28, blue: 0.32)
+-    static let heroBottom = Color(red: 0.045, green: 0.15, blue: 0.22)
++    /// Hero cards are intentionally deep and cinematic in both schemes.
++    static let heroTop = Color(red: 0.025, green: 0.055, blue: 0.10)
++    static let heroBottom = Color(red: 0.055, green: 0.11, blue: 0.22)
++    static let heroGlow = Color(red: 0.20, green: 0.83, blue: 0.86)
+ 
+     /// Sleep stage color, shared with the Watch app through the same token.
+     static func stageColor(_ stage: SleepStage) -> Color { color(HealthDesignTokens.stageToken(for: stage)) }
+ }
+ 
++/// A restrained atmospheric canvas shared by the primary screens. The color
++/// is semantic, the glow is decorative, and no animation is used so Reduce
++/// Motion and low-power states are unaffected.
++struct HealthAmbientBackground: View {
++    @Environment(\.colorScheme) private var colorScheme
++    var prominent = false
++
++    var body: some View {
++        ZStack {
++            HealthTheme.v3Canvas
++
++            LinearGradient(
++                colors: colorScheme == .dark
++                    ? [Color(red: 0.025, green: 0.048, blue: 0.10),
++                       Color(red: 0.035, green: 0.075, blue: 0.12),
++                       Color(red: 0.025, green: 0.035, blue: 0.075)]
++                    : [Color(red: 0.95, green: 0.98, blue: 1.0),
++                       Color(red: 0.97, green: 0.99, blue: 0.98),
++                       Color(red: 0.95, green: 0.97, blue: 1.0)],
++                startPoint: .topLeading,
++                endPoint: .bottomTrailing
++            )
++
++            Circle()
++                .fill(HealthTheme.v3Stress.opacity(colorScheme == .dark ? 0.17 : 0.11))
++                .frame(width: prominent ? 390 : 320, height: prominent ? 390 : 320)
++                .blur(radius: 88)
++                .offset(x: prominent ? 180 : 150, y: -300)
++
++            Circle()
++                .fill(HealthTheme.v3Sleep.opacity(colorScheme == .dark ? 0.15 : 0.09))
++                .frame(width: prominent ? 430 : 360, height: prominent ? 430 : 360)
++                .blur(radius: 100)
++                .offset(x: -190, y: 290)
++
++            if prominent {
++                Circle()
++                    .fill(HealthTheme.v3Recovery.opacity(colorScheme == .dark ? 0.07 : 0.06))
++                    .frame(width: 260, height: 260)
++                    .blur(radius: 80)
++                    .offset(x: 120, y: 170)
++            }
++        }
++        .ignoresSafeArea()
++        .accessibilityHidden(true)
++    }
++}
++
++/// A low-chrome glass surface. It uses material only as texture; the semantic
++/// card color preserves readable contrast in both appearances.
++struct HealthGlassSurface: View {
++    @Environment(\.colorScheme) private var colorScheme
++    var cornerRadius: CGFloat = 24
++    var tint: Color? = nil
++
++    var body: some View {
++        ZStack {
++            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
++                .fill(.ultraThinMaterial)
++            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
++                .fill(HealthTheme.v3Card.opacity(colorScheme == .dark ? 0.58 : 0.82))
++            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
++                .fill(
++                    LinearGradient(
++                        colors: [
++                            .white.opacity(colorScheme == .dark ? 0.07 : 0.36),
++                            (tint ?? HealthTheme.v3Brand).opacity(colorScheme == .dark ? 0.045 : 0.03),
++                            .clear
++                        ],
++                        startPoint: .topLeading,
++                        endPoint: .bottomTrailing
++                    )
++                )
++            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
++                .strokeBorder(
++                    LinearGradient(
++                        colors: [
++                            .white.opacity(colorScheme == .dark ? 0.18 : 0.72),
++                            HealthTheme.v3Line.opacity(0.48)
++                        ],
++                        startPoint: .topLeading,
++                        endPoint: .bottomTrailing
++                    ),
++                    lineWidth: 0.8
++                )
++        }
++    }
++}
++
+ struct HealthCard<Content: View>: View {
+     let content: Content
+     init(@ViewBuilder content: () -> Content) { self.content = content() }
+@@ -42,8 +132,10 @@ struct HealthCard<Content: View>: View {
+         content
+             .frame(maxWidth: .infinity, alignment: .leading)
+             .padding(18)
+-            .background(HealthTheme.surface, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+-            .overlay(RoundedRectangle(cornerRadius: 23, style: .continuous).strokeBorder(HealthTheme.line.opacity(0.65), lineWidth: 0.7))
++            .background {
++                HealthGlassSurface(cornerRadius: 23)
++            }
++            .shadow(color: .black.opacity(0.10), radius: 20, x: 0, y: 10)
+             .accessibilityElement(children: .contain)
+     }
+ }
+diff --git a/iOS/Views/TimelineView.swift b/iOS/Views/TimelineView.swift
+new file mode 100644
+index 0000000..26942e6
+--- /dev/null
++++ b/iOS/Views/TimelineView.swift
+@@ -0,0 +1,159 @@
++import SwiftUI
++import HealthCore
++
++/// Chronological local timeline. It combines real HealthKit samples with
++/// explicit user records and keeps the source visible for every entry.
++struct TimelineView: View {
++    @EnvironmentObject private var health: HealthViewModel
++    @EnvironmentObject private var journal: JournalStore
++    @StateObject private var nutrition = NutritionStore()
++
++    fileprivate struct Event: Identifiable {
++        let id: String
++        let date: Date
++        let title: String
++        let detail: String
++        let source: String
++        let icon: String
++        let color: Color
++    }
++
++    private var events: [Event] {
++        let cutoff = Date().addingTimeInterval(-36 * 3600)
++        var result: [Event] = []
++
++        for (id, reading) in health.readings where reading.recordedAt >= cutoff {
++            guard let metric = HealthCatalog.byID[id] else { continue }
++            result.append(
++                Event(
++                    id: "health-\(id)-\(reading.recordedAt.timeIntervalSince1970)",
++                    date: reading.recordedAt,
++                    title: metric.name,
++                    detail: "\(metric.display(reading.value)) \(metric.unitText)",
++                    source: reading.source.isEmpty ? "来源未知" : reading.source,
++                    icon: metric.symbol,
++                    color: HealthTheme.v3Stress
++                )
++            )
++        }
++
++        for entry in journal.entries where entry.timestamp >= cutoff {
++            result.append(
++                Event(
++                    id: "journal-\(entry.id)",
++                    date: entry.timestamp,
++                    title: entry.title,
++                    detail: entry.detail.isEmpty ? entry.category.rawValue : entry.detail,
++                    source: "本机日记 · \(entry.category.rawValue)",
++                    icon: "square.and.pencil",
++                    color: HealthTheme.v3Energy
++                )
++            )
++        }
++
++        for entry in nutrition.entries where entry.timestamp >= cutoff {
++            result.append(
++                Event(
++                    id: "nutrition-\(entry.id)",
++                    date: entry.timestamp,
++                    title: entry.title,
++                    detail: "\(entry.calories.formatted(.number.precision(.fractionLength(0)))) kcal",
++                    source: "本机营养记录",
++                    icon: "fork.knife",
++                    color: HealthTheme.v3Recovery
++                )
++            )
++        }
++
++        return result.sorted { $0.date > $1.date }
++    }
++
++    var body: some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 20) {
++                VStack(alignment: .leading, spacing: 7) {
++                    Text("TIMELINE")
++                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
++                        .tracking(2.2)
++                        .foregroundStyle(HealthTheme.v3BrandText)
++                    Text("健康时间线")
++                        .font(.system(size: 31, weight: .semibold, design: .rounded))
++                        .foregroundStyle(HealthTheme.v3Ink)
++                    Text("最近 36 小时 · 真实样本与主动记录")
++                        .font(.system(size: 14, weight: .medium, design: .rounded))
++                        .foregroundStyle(HealthTheme.v3Muted)
++                }
++
++                if events.isEmpty {
++                    V3EmptyStateView(
++                        title: "时间线暂时为空",
++                        detail: "连接 Apple 健康或添加一条本机记录后，这里会按时间显示事件。",
++                        symbol: "clock.arrow.circlepath"
++                    )
++                } else {
++                    VStack(spacing: 0) {
++                        ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
++                            TimelineRow(event: event, isLast: index == events.count - 1)
++                        }
++                    }
++                    .padding(.vertical, 8)
++                    .background {
++                        HealthGlassSurface(cornerRadius: 26)
++                    }
++                }
++            }
++            .padding(.horizontal, 20)
++            .padding(.bottom, 28)
++        }
++        .scrollIndicators(.hidden)
++        .background { HealthAmbientBackground(prominent: true) }
++        .navigationBarTitleDisplayMode(.inline)
++    }
++}
++
++private struct TimelineRow: View {
++    let event: TimelineView.Event
++    let isLast: Bool
++
++    var body: some View {
++        HStack(alignment: .top, spacing: 13) {
++            VStack(spacing: 0) {
++                Text(event.date.formatted(date: .omitted, time: .shortened))
++                    .font(.system(size: 10, weight: .semibold, design: .rounded))
++                    .monospacedDigit()
++                    .foregroundStyle(HealthTheme.v3Muted)
++                    .frame(width: 45)
++                Rectangle()
++                    .fill(event.color)
++                    .frame(width: 2, height: 34)
++                    .opacity(isLast ? 0 : 0.22)
++            }
++            VStack(alignment: .leading, spacing: 9) {
++                HStack(spacing: 9) {
++                    Image(systemName: event.icon)
++                        .font(.system(size: 13, weight: .semibold))
++                        .foregroundStyle(event.color)
++                        .frame(width: 32, height: 32)
++                        .background(event.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
++                    VStack(alignment: .leading, spacing: 2) {
++                        Text(event.title)
++                            .font(.system(size: 15, weight: .semibold))
++                            .foregroundStyle(HealthTheme.v3Ink)
++                        Text(event.detail)
++                            .font(.system(size: 12.5))
++                            .foregroundStyle(HealthTheme.v3Muted)
++                            .lineLimit(2)
++                    }
++                    Spacer(minLength: 0)
++                }
++                Text(event.source)
++                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
++                    .foregroundStyle(HealthTheme.v3Muted)
++                    .padding(.leading, 41)
++            }
++            .padding(.vertical, 9)
++        }
++        .padding(.horizontal, 16)
++        .accessibilityElement(children: .combine)
++    }
++}
+diff --git a/iOS/Views/TodayView.swift b/iOS/Views/TodayView.swift
+index 8d22026..afcb48e 100644
+--- a/iOS/Views/TodayView.swift
++++ b/iOS/Views/TodayView.swift
+@@ -35,9 +35,10 @@ struct TodayView: View {
+     var body: some View {
+         NavigationStack {
+             ScrollView {
+-                VStack(alignment: .leading, spacing: 16) {
++                VStack(alignment: .leading, spacing: 18) {
+                     pageHeading
+-                    hero
++                    overviewPanel
++                    quickActions
+                     currentSection
+                     stateContent
+                     footer
+@@ -45,7 +46,8 @@ struct TodayView: View {
+                 .padding(.horizontal, HealthTheme.v3Margin)
+                 .padding(.bottom, 28)
+             }
+-            .background(HealthTheme.v3Canvas.ignoresSafeArea())
++            .scrollIndicators(.hidden)
++            .background { HealthAmbientBackground(prominent: true) }
+             .navigationBarTitleDisplayMode(.inline)
+             .toolbar {
+                 ToolbarItemGroup(placement: .topBarTrailing) {
+@@ -74,9 +76,72 @@ struct TodayView: View {
+         }
+     }
+ 
++    private var quickActions: some View {
++        HStack(spacing: 12) {
++            NavigationLink {
++                NutritionView()
++            } label: {
++                QuickFeatureTile(
++                    title: "营养",
++                    detail: "本地记录",
++                    icon: "fork.knife",
++                    color: HealthTheme.v3Energy
++                )
++            }
++            .buttonStyle(.plain)
++
++            NavigationLink {
++                ActivityView()
++            } label: {
++                QuickFeatureTile(
++                    title: "训练",
++                    detail: "活动与恢复",
++                    icon: "figure.run",
++                    color: HealthTheme.v3Recovery
++                )
++            }
++            .buttonStyle(.plain)
++        }
++    }
++
++    private var overviewPanel: some View {
++        let sleep = modules.first(where: { $0.id == .sleep })
++        let recovery = modules.first(where: { $0.id == .recovery })
++        let load = modules.first(where: { $0.id == .load })
++        let sleepProgress = sleepMinutesFraction
++        let sleepValue = health.sleep == nil ? "—" : sleepCompactText
++
++        return TodayOverviewRings(
++            rings: [
++                OverviewRingMetric(
++                    id: "load", title: "负荷",
++                    value: coveragePercent(load),
++                    caption: load?.coverage == 0 ? "暂无" : "覆盖",
++                    progress: load?.coverage ?? 0,
++                    color: HealthTheme.v3Load
++                ),
++                OverviewRingMetric(
++                    id: "recovery", title: "恢复",
++                    value: coveragePercent(recovery),
++                    caption: recovery?.coverage == 0 ? "暂无" : "覆盖",
++                    progress: recovery?.coverage ?? 0,
++                    color: HealthTheme.v3Recovery
++                ),
++                OverviewRingMetric(
++                    id: "sleep", title: "睡眠",
++                    value: sleepValue,
++                    caption: sleep == nil ? "暂无" : "已记录",
++                    progress: sleepProgress,
++                    color: HealthTheme.v3Sleep
++                )
++            ],
++            isLive: health.hasRequestedAccess && health.readings.isEmpty == false
++        )
++    }
++
+     private var currentSection: some View {
+         VStack(alignment: .leading, spacing: 10) {
+-            V3SectionHeadline(title: "此刻与近期", subtitle: "心情由你记录；心率显示最近一次真实测量")
++            V3SectionHeadline(title: "此刻", subtitle: "最近一次真实测量与你主动记录的心情")
+             if let metric = HealthCatalog.byID["heartRate"] {
+                 NavigationLink {
+                     MetricDetailView(metric: metric)
+@@ -97,24 +162,24 @@ struct TodayView: View {
+     }
+ 
+     private var pageHeading: some View {
+-        VStack(alignment: .leading, spacing: 6) {
++        VStack(alignment: .leading, spacing: 9) {
+             HStack {
+-                Text("健康中枢 PRO")
+-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+-                    .tracking(2)
++                Text("HEALTH INTELLIGENCE")
++                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
++                    .tracking(2.3)
+                     .foregroundStyle(HealthTheme.v3BrandText)
+                 Spacer()
+                 V3Pill(title: "本机私密", icon: "lock.shield.fill")
+             }
+-            Text("今日")
+-                .font(.largeTitle.weight(.bold))
++            Text("今天，身体怎么样？")
++                .font(.system(size: 31, weight: .semibold, design: .rounded))
+                 .foregroundStyle(HealthTheme.v3Ink)
+                 .minimumScaleFactor(0.85)
+             Text(ChineseDateTime.day(Date.now))
+-                .font(.subheadline)
++                .font(.system(size: 14, weight: .medium, design: .rounded))
+                 .foregroundStyle(HealthTheme.v3Muted)
+         }
+-        .padding(.top, 16)
++        .padding(.top, 10)
+     }
+ 
+     private var hero: some View {
+@@ -355,6 +420,21 @@ struct TodayView: View {
+         return "\(sleep.totalAsleepMinutes / 60)小时 \(sleep.totalAsleepMinutes % 60)分"
+     }
+ 
++    private var sleepCompactText: String {
++        guard let sleep = health.sleep, sleep.totalAsleepMinutes > 0 else { return "—" }
++        return "\(sleep.totalAsleepMinutes / 60)h\(sleep.totalAsleepMinutes % 60)"
++    }
++
++    private var sleepMinutesFraction: Double {
++        guard let sleep = health.sleep else { return 0 }
++        return min(max(Double(sleep.totalAsleepMinutes) / 480.0, 0), 1)
++    }
++
++    private func coveragePercent(_ module: TodayModule?) -> String {
++        guard let module, module.presentCount > 0 else { return "—" }
++        return "\(Int((module.coverage * 100).rounded()))%"
++    }
++
+     private func freshness(of recordedAt: Date?) -> (String, Color) {
+         guard let recordedAt else { return ("暂无记录", HealthTheme.v3Muted) }
+         switch FreshnessEvaluator.evaluate(recordedAt: recordedAt, now: .now, acceptableAge: 24 * 3600) {
+@@ -487,3 +567,39 @@ struct TodayView: View {
+         return [sleepModule, recoveryModule, stressModule, energyModule, loadModule]
+     }
+ }
++
++private struct QuickFeatureTile: View {
++    let title: String
++    let detail: String
++    let icon: String
++    let color: Color
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 12) {
++            HStack {
++                Image(systemName: icon)
++                    .font(.system(size: 15, weight: .semibold))
++                    .foregroundStyle(color)
++                    .frame(width: 36, height: 36)
++                    .background(color.opacity(0.11), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
++                Spacer()
++                Image(systemName: "arrow.up.right")
++                    .font(.system(size: 10, weight: .semibold))
++                    .foregroundStyle(HealthTheme.v3Muted)
++            }
++            VStack(alignment: .leading, spacing: 2) {
++                Text(title)
++                    .font(.system(size: 17, weight: .semibold, design: .rounded))
++                    .foregroundStyle(HealthTheme.v3Ink)
++                Text(detail)
++                    .font(.system(size: 11, weight: .medium, design: .rounded))
++                    .foregroundStyle(HealthTheme.v3Muted)
++            }
++        }
++        .frame(maxWidth: .infinity, alignment: .leading)
++        .padding(15)
++        .background {
++            HealthGlassSurface(cornerRadius: 21, tint: color)
++        }
++    }
++}
+diff --git a/iOS/Views/V3Components.swift b/iOS/Views/V3Components.swift
+index 9a1d7ce..149fde5 100644
+--- a/iOS/Views/V3Components.swift
++++ b/iOS/Views/V3Components.swift
+@@ -15,12 +15,10 @@ struct V3Card<Content: View>: View {
+         content
+             .frame(maxWidth: .infinity, alignment: .leading)
+             .padding(16)
+-            .background(HealthTheme.v3Card, in: RoundedRectangle(cornerRadius: HealthTheme.v3CardRadius, style: .continuous))
+-            .overlay(
+-                RoundedRectangle(cornerRadius: HealthTheme.v3CardRadius, style: .continuous)
+-                    .strokeBorder(HealthTheme.v3Line.opacity(0.7), lineWidth: 0.7)
+-            )
+-            .shadow(color: colorScheme == .dark ? .clear : .black.opacity(0.06), radius: 14, x: 0, y: 4)
++            .background {
++                HealthGlassSurface(cornerRadius: HealthTheme.v3CardRadius)
++            }
++            .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.07), radius: 18, x: 0, y: 8)
+             .accessibilityElement(children: .contain)
+     }
+ }
+@@ -30,28 +28,40 @@ struct V3Hero<Content: View>: View {
+     let content: Content
+     init(@ViewBuilder content: () -> Content) { self.content = content() }
+     var body: some View {
+-        content
+-            .padding(18)
+-            .frame(maxWidth: .infinity, alignment: .leading)
+-            .background(heroBackground)
++        ZStack(alignment: .topTrailing) {
++            heroBackground
++
++            Circle()
++                .fill(HealthTheme.heroGlow.opacity(0.20))
++                .frame(width: 190, height: 190)
++                .blur(radius: 56)
++                .offset(x: 62, y: -78)
++                .accessibilityHidden(true)
++
++            content
++                .padding(20)
++                .frame(maxWidth: .infinity, alignment: .leading)
++                .environment(\.colorScheme, .dark)
++        }
+             .clipShape(RoundedRectangle(cornerRadius: HealthTheme.v3HeroRadius, style: .continuous))
+             .overlay(
+                 RoundedRectangle(cornerRadius: HealthTheme.v3HeroRadius, style: .continuous)
+-                    .strokeBorder(HealthTheme.v3Line.opacity(0.5), lineWidth: 0.7)
++                    .strokeBorder(.white.opacity(colorScheme == .dark ? 0.14 : 0.20), lineWidth: 0.8)
+             )
+-            .shadow(color: colorScheme == .dark ? .clear : .black.opacity(0.06), radius: 14, x: 0, y: 4)
++            .shadow(color: HealthTheme.heroGlow.opacity(colorScheme == .dark ? 0.12 : 0.08), radius: 28, x: 0, y: 12)
+             .accessibilityElement(children: .contain)
+     }
+     @ViewBuilder
+     private var heroBackground: some View {
+-        if colorScheme == .dark {
+-            LinearGradient(
+-                colors: [HealthTheme.v3Card, HealthTheme.v3SurfaceSecondary],
+-                startPoint: .topLeading, endPoint: .bottomTrailing
+-            )
+-        } else {
+-            HealthTheme.v3Card
+-        }
++        LinearGradient(
++            colors: [
++                HealthTheme.heroTop,
++                HealthTheme.heroBottom,
++                Color(red: 0.06, green: 0.10, blue: 0.21)
++            ],
++            startPoint: .topLeading,
++            endPoint: .bottomTrailing
++        )
+     }
+ }
+ 
+@@ -76,11 +86,11 @@ struct V3SectionHeadline: View {
+     var body: some View {
+         VStack(alignment: .leading, spacing: 4) {
+             Text(title)
+-                .font(HealthTheme.v3SectionFont)
++                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                 .foregroundStyle(HealthTheme.v3Ink)
+             if let subtitle {
+                 Text(subtitle)
+-                    .font(HealthTheme.v3AuxFont)
++                    .font(.system(size: 12.5, weight: .regular))
+                     .foregroundStyle(HealthTheme.v3Muted)
+             }
+         }
+@@ -92,7 +102,7 @@ struct V3SectionHeadline: View {
+ /// A module's data for the Home page. The ring shows data coverage
+ /// (inputs present / inputs expected), never a health score.
+ struct TodayModule: Identifiable {
+-    enum Kind { case sleep, recovery, stress, energy, load }
++    enum Kind: Equatable { case sleep, recovery, stress, energy, load }
+     let id: Kind
+     let title: String
+     let icon: String
+@@ -115,6 +125,178 @@ struct TodayModule: Identifiable {
+     var coverageText: String { "\(presentCount)/\(totalCount)" }
+ }
+ 
++/// A compact visual summary for the three most important states. The ring
++/// progress and percentage describe data coverage (or sleep-duration target
++/// progress), never a fabricated health score.
++struct OverviewRingMetric: Identifiable {
++    let id: String
++    let title: String
++    let value: String
++    let caption: String
++    let progress: Double
++    let color: Color
++}
++
++struct OverviewRing: View {
++    let item: OverviewRingMetric
++    let size: CGFloat
++    @Environment(\.accessibilityReduceMotion) private var reduceMotion
++
++    private var clamped: Double { min(max(item.progress, 0), 1) }
++
++    var body: some View {
++        VStack(spacing: 8) {
++            ZStack {
++                Circle()
++                    .stroke(.white.opacity(0.08), lineWidth: 8)
++
++                Circle()
++                    .trim(from: 0, to: clamped)
++                    .stroke(
++                        AngularGradient(
++                            colors: [item.color.opacity(0.35), item.color, item.color.opacity(0.72)],
++                            center: .center
++                        ),
++                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
++                    )
++                    .rotationEffect(.degrees(-90))
++                    .shadow(color: item.color.opacity(clamped > 0 ? 0.42 : 0), radius: 12)
++
++                Circle()
++                    .fill(
++                        RadialGradient(
++                            colors: [item.color.opacity(0.13), .clear],
++                            center: .center,
++                            startRadius: 0,
++                            endRadius: size * 0.53
++                        )
++                    )
++                    .padding(12)
++
++                VStack(spacing: 0) {
++                    Text(item.value)
++                        .font(.system(size: size * 0.235, weight: .semibold, design: .rounded))
++                        .monospacedDigit()
++                        .foregroundStyle(.white)
++                        .minimumScaleFactor(0.65)
++                        .lineLimit(1)
++                    Text(item.caption)
++                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
++                        .foregroundStyle(.white.opacity(0.52))
++                }
++                .padding(10)
++            }
++            .frame(width: size, height: size)
++
++            Text(item.title)
++                .font(.system(size: 12, weight: .medium, design: .rounded))
++                .foregroundStyle(.white.opacity(0.58))
++        }
++        .accessibilityElement(children: .ignore)
++        .accessibilityLabel("\(item.title)，\(item.value)，\(item.caption)")
++    }
++}
++
++struct TodayOverviewRings: View {
++    let rings: [OverviewRingMetric]
++    let isLive: Bool
++    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
++
++    var body: some View {
++        ZStack(alignment: .topTrailing) {
++            RoundedRectangle(cornerRadius: 30, style: .continuous)
++                .fill(
++                    LinearGradient(
++                        colors: [
++                            Color(red: 0.035, green: 0.07, blue: 0.14),
++                            Color(red: 0.075, green: 0.11, blue: 0.23),
++                            Color(red: 0.04, green: 0.055, blue: 0.12)
++                        ],
++                        startPoint: .topLeading,
++                        endPoint: .bottomTrailing
++                    )
++                )
++
++            Circle()
++                .fill(HealthTheme.heroGlow.opacity(0.18))
++                .frame(width: 230, height: 230)
++                .blur(radius: 58)
++                .offset(x: 58, y: -112)
++                .accessibilityHidden(true)
++
++            VStack(alignment: .leading, spacing: 20) {
++                HStack(alignment: .center) {
++                    VStack(alignment: .leading, spacing: 4) {
++                        Text("TODAY")
++                            .font(.system(size: 10, weight: .bold, design: .rounded))
++                            .tracking(2)
++                            .foregroundStyle(.white.opacity(0.44))
++                        Text("身体状态")
++                            .font(.system(size: 20, weight: .semibold, design: .rounded))
++                            .foregroundStyle(.white)
++                    }
++                    Spacer()
++                    HStack(spacing: 6) {
++                        Circle()
++                            .fill(isLive ? HealthTheme.v3Recovery : .white.opacity(0.35))
++                            .frame(width: 5, height: 5)
++                        Text(isLive ? "真实数据" : "等待数据")
++                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
++                    }
++                    .foregroundStyle(.white.opacity(0.65))
++                    .padding(.horizontal, 10)
++                    .padding(.vertical, 7)
++                    .background(.white.opacity(0.07), in: Capsule())
++                }
++
++                Group {
++                    if dynamicTypeSize.isAccessibilitySize {
++                        VStack(spacing: 18) {
++                            ForEach(rings) { ring in
++                                HStack(spacing: 18) {
++                                    OverviewRing(item: ring, size: 78)
++                                    VStack(alignment: .leading, spacing: 3) {
++                                        Text(ring.title)
++                                            .font(.headline)
++                                            .foregroundStyle(.white)
++                                        Text("\(ring.value) · \(ring.caption)")
++                                            .font(.subheadline)
++                                            .foregroundStyle(.white.opacity(0.58))
++                                    }
++                                    Spacer()
++                                }
++                            }
++                        }
++                    } else {
++                        HStack(alignment: .top, spacing: 14) {
++                            ForEach(rings) { ring in
++                                OverviewRing(item: ring, size: 86)
++                                    .frame(maxWidth: .infinity)
++                            }
++                        }
++                    }
++                }
++
++                HStack(spacing: 6) {
++                    Image(systemName: "sparkles")
++                        .font(.system(size: 10, weight: .semibold))
++                    Text("数据覆盖不是健康评分，也不用于诊断")
++                        .font(.system(size: 10.5, weight: .medium, design: .rounded))
++                    Spacer(minLength: 0)
++                }
++                .foregroundStyle(.white.opacity(0.38))
++            }
++            .padding(20)
++        }
++        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
++        .overlay(
++            RoundedRectangle(cornerRadius: 30, style: .continuous)
++                .strokeBorder(.white.opacity(0.13), lineWidth: 0.8)
++        )
++        .shadow(color: HealthTheme.heroGlow.opacity(0.09), radius: 30, x: 0, y: 16)
++    }
++}
++
+ /// Coverage ring: the fill is the fraction of the module's expected data
+ /// inputs that are present. Center shows the fraction (e.g. "2/2"), not a
+ /// score. Static geometry; never animated as a heartbeat or ECG trace.
+@@ -128,11 +310,18 @@ struct StatusRing: View {
+     var body: some View {
+         ZStack {
+             Circle()
+-                .stroke(HealthTheme.v3Line, lineWidth: lineWidth)
++                .stroke(HealthTheme.v3Line.opacity(0.42), lineWidth: lineWidth)
+             Circle()
+                 .trim(from: 0, to: clampedProgress)
+-                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
++                .stroke(
++                    AngularGradient(
++                        colors: [color.opacity(0.42), color, color.opacity(0.82)],
++                        center: .center
++                    ),
++                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
++                )
+                 .rotationEffect(.degrees(-90))
++                .shadow(color: color.opacity(clampedProgress > 0 ? 0.34 : 0), radius: 8)
+             VStack(spacing: 0) {
+                 Text(center)
+                     .font(.system(size: size * 0.24, weight: .bold, design: .rounded))
+@@ -214,12 +403,24 @@ struct ModuleCardContent: View {
+                 .accessibilityHidden(true)
+         }
+         .padding(16)
+-        .background(HealthTheme.v3Card, in: RoundedRectangle(cornerRadius: HealthTheme.v3CardRadius, style: .continuous))
+-        .overlay(
+-            RoundedRectangle(cornerRadius: HealthTheme.v3CardRadius, style: .continuous)
+-                .strokeBorder(HealthTheme.v3Line.opacity(0.7), lineWidth: 0.7)
+-        )
+-        .shadow(color: colorScheme == .dark ? .clear : .black.opacity(0.06), radius: 14, x: 0, y: 4)
++        .background {
++            HealthGlassSurface(cornerRadius: HealthTheme.v3CardRadius, tint: module.color)
++        }
++        .overlay(alignment: .leading) {
++            Capsule()
++                .fill(
++                    LinearGradient(
++                        colors: [module.color.opacity(0.15), module.color.opacity(0.85)],
++                        startPoint: .top,
++                        endPoint: .bottom
++                    )
++                )
++                .frame(width: 3)
++                .padding(.vertical, 18)
++                .padding(.leading, 1)
++                .accessibilityHidden(true)
++        }
++        .shadow(color: module.color.opacity(colorScheme == .dark ? 0.10 : 0.05), radius: 18, x: 0, y: 8)
+     }
+ }
+ 
+diff --git a/iOS/Views/WelcomeHealthView.swift b/iOS/Views/WelcomeHealthView.swift
+index bde3aa2..d1e30d8 100644
+--- a/iOS/Views/WelcomeHealthView.swift
++++ b/iOS/Views/WelcomeHealthView.swift
+@@ -58,7 +58,7 @@ struct WelcomeHealthView: View {
+                 }
+                 .padding(22)
+             }
+-            .background(HealthTheme.canvas.ignoresSafeArea())
++            .background { HealthAmbientBackground(prominent: true) }
+             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("跳过") { complete() } } }
+         }
+     }
+-- 
+2.56.0.windows.4
+
