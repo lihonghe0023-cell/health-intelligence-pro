@@ -13,7 +13,7 @@ public enum CardiovascularRecoveryCoverage {
     public static func availableMetricIDs(in readings: [String: MetricReading]) -> [String] {
         metricIDs.filter { id in
             guard let reading = readings[id] else { return false }
-            return reading.value.isFinite && reading.value >= 0
+            return reading.value.isFinite && (id == "heartRateRecoveryOneMinute" || reading.value >= 0)
         }
     }
 
