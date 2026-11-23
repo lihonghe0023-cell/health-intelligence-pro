@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Apply cinematic UI patch
+        run: git apply --check ui-cinematic.patch && git apply ui-cinematic.patch
 
       - name: Inspect Xcode and source
         run: |
