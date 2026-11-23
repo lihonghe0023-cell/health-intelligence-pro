@@ -1,33 +1,3 @@
-From 578a1472484254e7640c07a121aff525f27e47d8 Mon Sep 17 00:00:00 2001
-From: lihonghe0023-cell <lihonghe0023@gmail.com>
-Date: Tue, 24 Nov 2026 02:44:10 +0800
-Subject: [PATCH] feat(ui): cinematic health dashboard and local nutrition
- timeline
-
----
- Core/Sources/HealthCore/DesignTokens.swift |  12 +-
- Core/Sources/HealthCore/Models.swift       |   5 +
- iOS/Services/NutritionStore.swift          | 160 ++++++++++
- iOS/Views/ActivityView.swift               |  76 ++++-
- iOS/Views/HeartView.swift                  | 121 +++++++-
- iOS/Views/MoodCheckInView.swift            |   6 +-
- iOS/Views/NutritionView.swift              | 342 +++++++++++++++++++++
- iOS/Views/RecordsView.swift                |  13 +-
- iOS/Views/ReportView.swift                 |   3 +-
- iOS/Views/RootView.swift                   |   2 +
- iOS/Views/SettingsView.swift               |   2 +-
- iOS/Views/SleepView.swift                  | 110 +++++--
- iOS/Views/StressView.swift                 |   3 +-
- iOS/Views/Theme.swift                      | 102 +++++-
- iOS/Views/TimelineView.swift               | 159 ++++++++++
- iOS/Views/TodayView.swift                  | 140 ++++++++-
- iOS/Views/V3Components.swift               | 263 ++++++++++++++--
- iOS/Views/WelcomeHealthView.swift          |   2 +-
- 18 files changed, 1427 insertions(+), 94 deletions(-)
- create mode 100644 iOS/Services/NutritionStore.swift
- create mode 100644 iOS/Views/NutritionView.swift
- create mode 100644 iOS/Views/TimelineView.swift
-
 diff --git a/Core/Sources/HealthCore/DesignTokens.swift b/Core/Sources/HealthCore/DesignTokens.swift
 index 9f89215..16b141e 100644
 --- a/Core/Sources/HealthCore/DesignTokens.swift
@@ -854,7 +824,7 @@ index 0000000..f22e167
 +    }
 +}
 diff --git a/iOS/Views/RecordsView.swift b/iOS/Views/RecordsView.swift
-index 6ff8284..0e68d04 100644
+index 6ff8284..4035fff 100644
 --- a/iOS/Views/RecordsView.swift
 +++ b/iOS/Views/RecordsView.swift
 @@ -24,6 +24,16 @@ struct RecordsView: View {
@@ -862,7 +832,7 @@ index 6ff8284..0e68d04 100644
                  }
                  Section("专题") {
 +                    NavigationLink {
-+                        TimelineView()
++                        HealthTimelineView()
 +                    } label: {
 +                        Label("健康时间线", systemImage: "clock.arrow.circlepath")
 +                    }
@@ -1221,7 +1191,7 @@ index 5a316ae..da70b9a 100644
  }
 diff --git a/iOS/Views/TimelineView.swift b/iOS/Views/TimelineView.swift
 new file mode 100644
-index 0000000..26942e6
+index 0000000..8f7b3ae
 --- /dev/null
 +++ b/iOS/Views/TimelineView.swift
 @@ -0,0 +1,159 @@
@@ -1230,7 +1200,7 @@ index 0000000..26942e6
 +
 +/// Chronological local timeline. It combines real HealthKit samples with
 +/// explicit user records and keeps the source visible for every entry.
-+struct TimelineView: View {
++struct HealthTimelineView: View {
 +    @EnvironmentObject private var health: HealthViewModel
 +    @EnvironmentObject private var journal: JournalStore
 +    @StateObject private var nutrition = NutritionStore()
@@ -1923,6 +1893,3 @@ index bde3aa2..d1e30d8 100644
              .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("跳过") { complete() } } }
          }
      }
--- 
-2.56.0.windows.4
-
