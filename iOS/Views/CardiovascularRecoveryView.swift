@@ -24,7 +24,7 @@ struct CardiovascularRecoveryView: View {
         let startOfToday = Calendar.current.startOfDay(for: .now)
         let start = Calendar.current.date(byAdding: .day, value: -(selectedDays - 1), to: startOfToday) ?? .distantPast
         return (health.trends["heartRateRecoveryOneMinute"] ?? [])
-            .filter { $0.recordedAt >= start && $0.value.isFinite && $0.value >= 0 }
+            .filter { $0.recordedAt >= start && $0.value.isFinite }
             .sorted { $0.recordedAt < $1.recordedAt }
     }
 
