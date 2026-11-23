@@ -78,8 +78,8 @@ struct CardiovascularRecoveryView: View {
                         .pickerStyle(.segmented)
                         .accessibilityLabel("心率恢复趋势时间范围")
                         if trend.isEmpty {
-                            EmptyHealthState(title: "暂无该时间范围的趋势记录",
-                                             detail: "请检查 Apple 健康中是否已有运动后心率恢复记录。",
+                            EmptyHealthState(title: "暂无可显示的趋势",
+                                             detail: "可能没有本时段记录，也可能读取失败、未授权或设备不支持；请在 Apple 健康核查。",
                                              symbol: "chart.xyaxis.line")
                                 .frame(minHeight: 160)
                         } else {
@@ -94,7 +94,7 @@ struct CardiovascularRecoveryView: View {
                             }
                             .frame(height: 212)
                             .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
-                            .accessibilityHidden(true)
+                            .accessibilityLabel("心率恢复每日汇总趋势，过去 \\(selectedDays) 天")
                             Text("最近的趋势记录")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(HealthTheme.ink)
